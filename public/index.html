@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Peak 10 Energy — Historical Strip Analysis</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -94,7 +95,14 @@ td.L{text-align:left;color:var(--sub)}
   <div><div class="brand-name">Peak 10 Energy</div><div class="brand-sub">Historical Strip Analysis</div></div>
   <div class="badge">EIA NYMEX DATA</div>
   <div class="badge" id="range-badge">Loading...</div>
-  <div class="header-right"><span class="pill pill-loading" id="status-pill">● Loading</span></div>
+  <div class="header-right">
+    <label title="Upload Aegis_Historical_C1C12_Weekly_2024-2026.xlsx to extend EIA data through present" style="cursor:pointer">
+      <input type="file" id="supp-file" accept=".xlsx" style="display:none" onchange="loadSupplement(this)"/>
+      <span id="supp-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload Aegis Supplement</span>
+    </label>
+    <span class="pill" id="supp-pill" style="display:none"></span>
+    <span class="pill pill-loading" id="status-pill">● Loading</span>
+  </div>
 </div>
 
 <div class="main" id="main-content" style="display:none">
@@ -222,8 +230,122 @@ let PX=0;
 
 let OIL={},GAS={},PERIODS=[];
 let CH={};
+let SUPP_LOADED=false; // tracks whether Aegis supplement has been merged
 
 const $=id=>document.getElementById(id);
+
+// ── Aegis Weekly C1-C12 Supplement Loader ─────────────────────────────────────
+// Reads Aegis_Historical_C1C12_Weekly_2024-2026.xlsx (or similar export).
+// Expected sheets: HH_Weekly_C1C12 and WTI_Weekly_C1C12
+// Each sheet: row1 = headers (As-Of Date, C1..C12, 12Mo Strip Avg)
+//             row2+ = weekly snapshots sorted ascending
+// Strategy: for each calendar month, use the LAST weekly snapshot in that month
+// (mirrors EIA's end-of-month convention). Aegis data takes precedence over EIA
+// for any overlapping months.
+function loadSupplement(inp){
+  const file=inp.files[0];
+  if(!file)return;
+  const pill=$('supp-pill');
+  const btn=$('supp-btn');
+  pill.style.display='inline';
+  pill.className='pill pill-loading';
+  pill.textContent='● Parsing…';
+  btn.style.color='var(--muted)';
+
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+
+      // Validate expected sheets exist
+      const hasHH=wb.SheetNames.some(s=>s.includes('HH'));
+      const hasWTI=wb.SheetNames.some(s=>s.includes('WTI'));
+      if(!hasHH||!hasWTI) throw new Error('Expected sheets HH_Weekly_C1C12 and WTI_Weekly_C1C12 not found. Check file.');
+
+      const hhSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('HH'))];
+      const wtiSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('WTI'))];
+
+      // Parse a C1-C12 sheet → {[YYYY-MM]: {1:price, 2:price, ...}}
+      // Uses last weekly snapshot per month
+      function parseSheet(ws){
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        if(rows.length<2) throw new Error('Sheet appears empty');
+        // rows[0] = headers; rows[1..] = data
+        const out={}; // YYYY-MM → {1..12}
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r];
+          if(!row||!row[0])continue;
+          // Column 0 = As-Of Date (may be JS Date or string MM/DD/YYYY)
+          let dt=row[0];
+          if(typeof dt==='string'){
+            const parts=dt.split('/');
+            if(parts.length===3) dt=new Date(+parts[2],+parts[0]-1,+parts[1]);
+            else dt=new Date(dt);
+          }
+          if(!(dt instanceof Date)||isNaN(dt)) continue;
+          const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+          // Columns 1-12 = C1-C12 prices
+          const contracts={};
+          for(let c=1;c<=12;c++){
+            const v=parseFloat(row[c]);
+            if(!isNaN(v)&&v>0) contracts[c]=v;
+          }
+          if(Object.keys(contracts).length<3) continue; // skip sparse rows
+          // Last-write wins → later rows in same month overwrite earlier (ascending sort = last week wins)
+          out[period]=contracts;
+        }
+        return out;
+      }
+
+      const hhData=parseSheet(hhSheet);
+      const wtiData=parseSheet(wtiSheet);
+
+      const hhPeriods=Object.keys(hhData).length;
+      const wtiPeriods=Object.keys(wtiData).length;
+      if(hhPeriods<6||wtiPeriods<6) throw new Error(`Too few periods parsed (HH:${hhPeriods}, WTI:${wtiPeriods}). Check file format.`);
+
+      // Merge into global OIL/GAS — Aegis takes precedence on overlap
+      let mergedNew=0,mergedOverlap=0;
+      Object.entries(wtiData).forEach(([p,contracts])=>{
+        const isNew=!OIL[p]||!OIL[p][1];
+        if(isNew) mergedNew++; else mergedOverlap++;
+        OIL[p]=contracts;
+      });
+      Object.entries(hhData).forEach(([p,contracts])=>{
+        GAS[p]=contracts;
+      });
+
+      // Rebuild PERIODS (same filter as loadData)
+      PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
+        .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
+
+      SUPP_LOADED=true;
+      inp.value=''; // reset so same file can be re-uploaded if needed
+
+      // Update UI
+      pill.className='pill pill-ok';
+      const latest=PERIODS[PERIODS.length-1];
+      pill.textContent=`● +${hhPeriods} mo Aegis (${mergedNew} new · ${mergedOverlap} overlap)`;
+      btn.style.color='var(--green)';
+      btn.textContent='✓ Supplement Loaded';
+      $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${latest}`;
+
+      // Re-render all charts with extended data
+      if(typeof renderAll==='function') renderAll();
+
+    }catch(err){
+      console.error('Supplement parse error:',err);
+      pill.className='pill pill-err';
+      pill.textContent='● Error: '+err.message;
+      btn.style.color='var(--red)';
+    }
+  };
+  reader.onerror=()=>{
+    pill.className='pill pill-err';
+    pill.textContent='● File read failed';
+  };
+  reader.readAsArrayBuffer(file);
+}
 const f$=(v,d=2)=>v==null?'—':'$'+(+v).toFixed(d);
 const MOS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const ML=p=>{if(!p)return'';const[y,m]=p.split('-');return MOS[+m-1]+' '+y.slice(2);};
