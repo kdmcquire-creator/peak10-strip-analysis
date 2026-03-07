@@ -171,15 +171,32 @@ td.L{text-align:left;color:var(--sub)}
   <div id="tab-decay" class="panel">
     <div class="ctrl-row">
       <div class="cg"><button class="cb oil" id="dec-oil" onclick="setDecC('oil')">WTI Oil</button><button class="cb" id="dec-gas" onclick="setDecC('gas')">Henry Hub</button></div>
-      <label style="font-size:10px;color:var(--muted);font-weight:700">DELIVERY YEAR:</label>
-      <select id="dec-year"><option value="2026" selected>2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
-      <button class="cb on" onclick="renderDecay()">▶ Update</button>
+      <div class="cg">
+        <button class="cb on" id="dec-12" onclick="setDecN(12)">12-Mo Strip</button>
+        <button class="cb" id="dec-6" onclick="setDecN(6)">6-Mo Strip</button>
+      </div>
     </div>
     <div class="insight" id="dec-insight"></div>
     <div class="g2">
-      <div class="card sp2"><div class="ct" id="dec-ct">STRIP PRICE PATH — HOW ANNUAL STRIP HAS EVOLVED OVER TIME</div><div class="cs">Each point = avg of delivery-year contracts as priced from that month. Green dot = historical best entry.</div><div style="position:relative"><canvas id="ch-dec-path" height="205"></canvas></div></div>
-      <div class="card"><div class="ct">LOOK-BACK: STRIP THEN vs NOW</div><div id="dec-lb" style="margin-top:6px"></div></div>
-      <div class="card"><div class="ct">CONTANGO / BACKWARDATION HISTORY (C12 − C1)</div><div style="position:relative"><canvas id="ch-dec-cg" height="195"></canvas></div></div>
+      <div class="card sp2">
+        <div class="ct">ROLLING STRIP AVG — FULL HISTORY (WHAT YOU COULD HAVE LOCKED IN)</div>
+        <div class="cs">Each point = 12-mo strip avg as priced that month. Green = all-time best entry. Red = worst. Dashed = today's level.</div>
+        <div style="position:relative"><canvas id="ch-dec-path" height="185"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="ct">FORWARD CURVE TODAY vs 12 &amp; 24 MONTHS AGO</div>
+        <div class="cs">C1–C12 term structure at three points in time. Shows whether the curve has shifted up, down, or reshaped.</div>
+        <div style="position:relative"><canvas id="ch-dec-curve" height="200"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="ct">LOOK-BACK: STRIP AVG THEN vs NOW</div>
+        <div id="dec-lb" style="margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">CONTANGO / BACKWARDATION HISTORY (C12 − C1)</div>
+      <div class="cs">Positive = contango (deferred at premium — extend tenor). Negative = backwardated (spot at premium — hedge near months).</div>
+      <div style="position:relative"><canvas id="ch-dec-cg" height="160"></canvas></div>
     </div>
   </div>
 
@@ -568,61 +585,114 @@ function renderSeasonality(){
 }
 
 // ── ⑤ STRIP DECAY ─────────────────────────────────────────
-let DC='oil';
+// What the tab shows:
+//   Path chart   — rolling 12-mo strip avg over full history (what you could
+//                  have locked in at each point). Green dot = all-time best entry.
+//   Tenor selector — compare 6-mo vs 12-mo strip so the "tenor window" is clear.
+//   Look-back table — strip avg 6/12/18/24 months ago vs today.
+//   Curve comparison — today's C1–C12 curve vs 12 months ago.
+//   Contango chart — C12−C1 spread history.
+//
+// Why NOT a "delivery year" slicer: EIA only publishes C1–C12 (relative contracts
+// up to 12 months out). A 2026 delivery year is only observable within ~12 months
+// of delivery — too short a window to build a meaningful historical path.
+// The rolling strip avg captures the same economic insight with full history.
+
+let DC='oil', DN=12;
 function setDecC(c){DC=c;$('dec-oil').className='cb'+(c==='oil'?' oil':'');$('dec-gas').className='cb'+(c==='gas'?' gas':'');renderDecay();}
+function setDecN(n){DN=n;$('dec-6').className='cb'+(n===6?' on':'');$('dec-12').className='cb'+(n===12?' on':'');renderDecay();}
 
 function renderDecay(){
   if(!PERIODS.length)return;
-  const c=DC,tY=parseInt($('dec-year').value||'2026');
+  const c=DC,n=DN;
   const col=c==='oil'?'#f59e0b':'#06b6d4',unit=c==='oil'?'$/bbl':'$/MMBtu';
   const lat=PERIODS[PERIODS.length-1];
 
-  const pd=[];
-  PERIODS.forEach(p=>{
-    const pD=new Date(p+'-01'),st=c==='oil'?OIL[p]:GAS[p];if(!st)return;
-    let sm=0,cn=0;
-    for(let m=1;m<=12;m++){
-      const td=new Date(`${tY}-${String(m).padStart(2,'0')}-01`);
-      const ah=Math.round((td-pD)/2592000000);
-      if(ah>=1&&ah<=12){const v=st[ah];if(v!=null&&!isNaN(v)){sm+=v;cn++;}}
-    }
-    if(cn>=3)pd.push({p,v:+(sm/cn).toFixed(2)});
+  // ── Rolling strip path (full history) ────────────────────
+  const allD=allAvgs(c,n);
+  const allV=allD.map(d=>d.v);
+  const curV=stripAvg(lat,c,n);
+  const mxV=Math.max(...allV);
+  const mxI=allV.indexOf(mxV);
+  const mnV=Math.min(...allV);
+  const mnI=allV.indexOf(mnV);
+
+  // ── Curve comparison: today vs 12 months ago ─────────────
+  const ago12=PERIODS[Math.max(0,PERIODS.length-13)];
+  const ago24=PERIODS[Math.max(0,PERIODS.length-25)];
+  const curCurve=stripArr(lat,c,12);
+  const ago12Curve=stripArr(ago12,c,12);
+  const ago24Curve=stripArr(ago24,c,12);
+
+  dCh('dp');dCh('dc');dCh('dcc');
+
+  // Path chart
+  CH['dp']=new Chart($('ch-dec-path').getContext('2d'),{type:'line',
+    data:{labels:allD.map(d=>d.p),datasets:[
+      {label:`${n}-Mo Rolling Strip Avg`,data:allV,borderColor:col,borderWidth:1.5,pointRadius:0,fill:false,tension:0.2},
+      {label:'All-time high',data:allV.map((_,i)=>i===mxI?allV[i]:null),borderColor:'#22c55e',borderWidth:0,pointRadius:7,pointBackgroundColor:'#22c55e',showLine:false},
+      {label:'All-time low',data:allV.map((_,i)=>i===mnI?allV[i]:null),borderColor:'#ef4444',borderWidth:0,pointRadius:7,pointBackgroundColor:'#ef4444',showLine:false}
+    ]},
+    options:{...bO,
+      plugins:{...bO.plugins,annotation:{annotations:{
+        cur:{type:'line',yMin:curV,yMax:curV,borderColor:col+'88',borderWidth:1.5,borderDash:[5,4],label:{content:'Today',display:true,color:col,font:{size:9}}}
+      }}},
+      scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}
   });
-  pd.sort((a,b)=>a.p>b.p?1:-1);
-  const pV=pd.map(d=>d.v);
-  const mxV=Math.max(...pV.filter(v=>v));
-  const mxI=pV.indexOf(mxV);
-  const curV=pd[pd.length-1]?.v;
 
-  dCh('dp');dCh('dc');
-  CH['dp']=new Chart($('ch-dec-path').getContext('2d'),{type:'line',data:{labels:pd.map(d=>ML(d.p)),datasets:[
-    {label:`${tY} strip avg by observation date`,data:pV,borderColor:col,borderWidth:2,pointRadius:0,fill:false,tension:0.2},
-    {label:'Optimal entry',data:pV.map((_,i)=>i===mxI?pV[i]:null),borderColor:'#22c55e',borderWidth:0,pointRadius:7,pointBackgroundColor:'#22c55e',showLine:false}
-  ]},options:{...bO,scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+  // Curve comparison chart
+  CH['dcc']=new Chart($('ch-dec-curve').getContext('2d'),{type:'line',
+    data:{labels:Array.from({length:12},(_,i)=>`C${i+1}`),datasets:[
+      {label:`Today (${ML(lat)})`,data:curCurve,borderColor:col,borderWidth:2.5,pointRadius:3,pointBackgroundColor:col,fill:false,tension:0.1},
+      {label:`12mo ago (${ML(ago12)})`,data:ago12Curve,borderColor:'#94a3b8',borderWidth:1.5,pointRadius:2,fill:false,tension:0.1,borderDash:[4,3]},
+      {label:`24mo ago (${ML(ago24)})`,data:ago24Curve,borderColor:'#475569',borderWidth:1,pointRadius:2,fill:false,tension:0.1,borderDash:[2,4]}
+    ]},
+    options:{...bO,scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}
+  });
 
-  $('dec-lb').innerHTML=`<table><thead><tr><th class="L">Look-Back</th><th>Strip Then</th><th>Current</th><th>Change</th></tr></thead><tbody>
-    ${[6,12,18,24].map(lb=>{
-      const ti=Math.max(0,pd.length-1-lb),v=pd[ti]?.v,d=v&&curV?+(curV-v).toFixed(2):null;
-      return`<tr><td class="L">${lb}mo ago (${ML(pd[ti]?.p)})</td>
-        <td style="color:${col}">${v?'$'+v.toFixed(2):'—'}</td>
-        <td>${curV?'$'+curV.toFixed(2):'—'}</td>
-        <td style="color:${d==null?'inherit':d>0?'#22c55e':'#ef4444'}">${d!=null?(d>0?'+':'')+d.toFixed(2)+' '+unit:'—'}</td></tr>`;
-    }).join('')}</tbody></table>`;
-
+  // Contango chart
   const cg=PERIODS.map(p=>{const s=c==='oil'?OIL[p]:GAS[p];if(!s||!s[1]||!s[12])return null;return{p,v:+(s[12]-s[1]).toFixed(2)};}).filter(Boolean);
-  CH['dc']=new Chart($('ch-dec-cg').getContext('2d'),{type:'bar',data:{labels:cg.map(d=>ML(d.p)),datasets:[{
-    label:'C12–C1',data:cg.map(d=>d.v),borderRadius:1,
-    backgroundColor:cg.map(d=>d.v>0?'#22c55e44':'#ef444444'),
-    borderColor:cg.map(d=>d.v>0?'#22c55e':'#ef4444'),borderWidth:1
-  }]},options:{...bO,plugins:{...bO.plugins,legend:{display:false},annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#64748b88',borderWidth:1}}}},
-    scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+v}}}}});
+  CH['dc']=new Chart($('ch-dec-cg').getContext('2d'),{type:'bar',
+    data:{labels:cg.map(d=>ML(d.p)),datasets:[{
+      label:'C12–C1',data:cg.map(d=>d.v),borderRadius:1,
+      backgroundColor:cg.map(d=>d.v>0?'#22c55e44':'#ef444444'),
+      borderColor:cg.map(d=>d.v>0?'#22c55e':'#ef4444'),borderWidth:1
+    }]},
+    options:{...bO,plugins:{...bO.plugins,legend:{display:false},
+      annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#64748b88',borderWidth:1}}}},
+      scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+v}}}}
+  });
+
+  // Look-back table
+  const lbs=[6,12,18,24,36];
+  $('dec-lb').innerHTML=`<table>
+    <thead><tr><th class="L">Look-Back</th><th>Strip Then</th><th>Today</th><th>Change</th><th>Change %</th></tr></thead>
+    <tbody>${lbs.map(lb=>{
+      const idx=Math.max(0,allD.length-1-lb);
+      const v=allD[idx]?.v;
+      const d=v&&curV?+(curV-v).toFixed(2):null;
+      const pD=v&&curV?(curV/v-1)*100:null;
+      return`<tr>
+        <td class="L">${lb}mo ago &nbsp;<span style="color:var(--muted)">(${ML(allD[idx]?.p)})</span></td>
+        <td style="color:${col}">${v?'$'+v.toFixed(2):'—'}</td>
+        <td style="color:${col}">${curV?'$'+curV.toFixed(2):'—'}</td>
+        <td style="color:${d==null?'inherit':d>0?'#22c55e':'#ef4444'}">${d!=null?(d>0?'+':'')+d.toFixed(2)+' '+unit:'—'}</td>
+        <td style="color:${pD==null?'inherit':pD>0?'#22c55e':'#ef4444'}">${pD!=null?(pD>0?'+':'')+pD.toFixed(1)+'%':'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 
   const cc=cg[cg.length-1]?.v;
-  $('dec-insight').innerHTML=`<strong>${tY} Strip Path:</strong>
-    Best historical hedge entry for ${tY}: <strong class="hi">${ML(pd[mxI]?.p)}</strong> at <strong>${'$'+mxV.toFixed(2)}</strong> ${unit}.
-    Current: <strong>${curV?'$'+curV.toFixed(2):'N/A'}</strong>.
-    Curve structure: <strong>${cc!=null?cc>0.5?'contango — extend tenor, lock deferred months':cc<-0.5?'backwardated — hedge front months':'near flat':'N/A'}</strong>
-    (C12−C1 = ${cc!=null?(cc>=0?'+':'')+cc.toFixed(2)+' '+unit:'N/A'}).`;
+  const pctRank=pctile(curV,allV);
+  const curVsAgo12=ago12Curve[0]&&curCurve[0]?+(curCurve[0]-ago12Curve[0]).toFixed(2):null;
+  $('dec-insight').innerHTML=`
+    <strong>Rolling ${n}-Mo Strip Path:</strong>
+    Today at <strong>${'$'+curV?.toFixed(2)}</strong> ${unit} — ${pctRank}th percentile of all observations since 2010.
+    All-time best hedge entry: <strong class="hi">${ML(allD[mxI]?.p)}</strong> at <strong>${'$'+mxV.toFixed(2)}</strong>.
+    All-time worst: <strong class="lo">${ML(allD[mnI]?.p)}</strong> at <strong>${'$'+mnV.toFixed(2)}</strong>.<br/><br/>
+    <strong>Curve shape today:</strong>
+    ${cc!=null?cc>0.5?`<span class="hi">Contango (+${cc.toFixed(2)} C12−C1)</span> — deferred months pricing at a premium, favorable to extend hedge tenor into 2027+`:cc<-0.5?`<span class="lo">Backwardated (${cc.toFixed(2)} C12−C1)</span> — near-term at premium, hedge front months and avoid paying roll cost`:`Near flat (${cc!=null?(cc>=0?'+':'')+cc.toFixed(2):''} C12−C1) — little roll cost advantage either way`:'N/A'}.
+    ${curVsAgo12!=null?`<br/>C1 (front month) is <strong style="color:${curVsAgo12>0?'#22c55e':'#ef4444'}">${curVsAgo12>0?'+':''}${curVsAgo12.toFixed(2)}</strong> ${unit} vs 12 months ago.`:''}`;
 }
 
 // ── ⑥ SCORECARD ──────────────────────────────────────────
