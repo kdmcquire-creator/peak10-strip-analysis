@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Peak 10 Energy — Historical Strip Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080d18;--bg2:#0f1729;--bg3:#162035;--bg4:#1c2a42;
+  --border:#1e3050;--border2:#253d61;
+  --oil:#f59e0b;--gas:#06b6d4;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;
+  --text:#e2e8f0;--muted:#64748b;--sub:#94a3b8;
+  --mono:'IBM Plex Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand-name{font-size:15px;font-weight:700;color:#f1f5f9}
+.brand-sub{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:1px}
+.badge{background:var(--border);border:1px solid var(--border2);border-radius:4px;padding:3px 8px;font-size:10px;color:var(--sub);font-weight:600}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{font-size:10px;padding:3px 10px;border-radius:12px;font-weight:600}
+.pill-loading{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}
+.pill-ok{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
+.pill-err{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
+.main{padding:18px 24px;max-width:1600px;margin:0 auto}
+.tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;flex-wrap:wrap;margin-bottom:16px}
+.tab{padding:7px 14px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:var(--mono);transition:all .15s;white-space:nowrap}
+.tab:hover{color:var(--sub);background:var(--bg3)}
+.tab.active{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px}
+.ct{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.10em;text-transform:uppercase;margin-bottom:4px}
+.cs{font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:12px 16px;flex:1;min-width:120px}
+.sl{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.10em;text-transform:uppercase;margin-bottom:4px}
+.sv{font-size:20px;font-weight:700;line-height:1}
+.ss{font-size:10px;color:var(--muted);margin-top:4px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sp2{grid-column:1/-1}
+@media(max-width:900px){.g2{grid-template-columns:1fr}}
+.insight{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--oil);border-radius:4px;padding:12px 14px;font-size:11px;color:var(--sub);line-height:1.8;margin-bottom:10px}
+.insight.gas{border-left-color:var(--gas)}
+.insight strong{color:var(--text)}
+.hi{color:#22c55e;font-weight:700}.lo{color:#ef4444;font-weight:700}.am{color:#f59e0b;font-weight:700}
+.ctrl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.cg{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:3px}
+.cb{padding:5px 12px;border:none;background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:var(--mono)}
+.cb.oil{background:var(--oil);color:#000}.cb.gas{background:var(--gas);color:#000}.cb.on{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
+select,input[type=month]{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:5px;outline:none}
+table{width:100%;border-collapse:collapse;font-size:11px}
+thead tr{border-bottom:1px solid var(--border)}
+th{padding:5px 8px;text-align:right;color:var(--muted);font-weight:600;font-size:10px;letter-spacing:.04em;white-space:nowrap}
+th.L{text-align:left}
+tbody tr{border-bottom:1px solid var(--bg)}
+tbody tr:hover{background:var(--bg3)}
+td{padding:4px 8px;text-align:right;font-size:11px}
+td.L{text-align:left;color:var(--sub)}
+
+/* LOADER */
+#loader{position:fixed;inset:0;background:rgba(8,13,24,.96);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+#loader.hidden{display:none}
+.ld-bar{width:340px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.ld-fill{height:100%;background:linear-gradient(90deg,var(--oil),var(--gas));transition:width .5s;width:0}
+
+/* ERR */
+#err-panel{display:none;background:var(--bg2);border:1px solid #ef444440;border-radius:8px;padding:24px;max-width:700px;margin:30px auto}
+.err-code{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 12px;font-size:10px;color:var(--amber);margin:8px 0}
+.retry-btn{background:var(--oil);color:#000;border:none;padding:8px 20px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;margin-top:10px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div style="font-size:30px">⚡</div>
+  <div style="font-size:18px;font-weight:700;color:var(--oil)">LOADING EIA STRIP DATA</div>
+  <div style="font-size:11px;color:var(--muted)" id="ld-msg">Connecting...</div>
+  <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
+  <div style="font-size:10px;color:var(--border2)" id="ld-detail">Fetching NYMEX WTI &amp; Henry Hub futures (2010–present) from U.S. Energy Information Administration API — 24 series, ~15–30 seconds</div>
+  <div style="font-size:10px;color:var(--muted);margin-top:4px" id="ld-series"></div>
+</div>
+
+<div id="err-panel">
+  <div style="color:#ef4444;font-weight:700;font-size:14px;margin-bottom:10px">⚠ Connection Error</div>
+  <div style="font-size:11px;color:var(--sub);line-height:1.8" id="err-body"></div>
+  <button class="retry-btn" onclick="retryLoad()">↺ Retry</button>
+</div>
+
+<div class="header">
+  <div><div class="brand-name">Peak 10 Energy</div><div class="brand-sub">Historical Strip Analysis</div></div>
+  <div class="badge">EIA NYMEX DATA</div>
+  <div class="badge" id="range-badge">Loading...</div>
+  <div class="header-right"><span class="pill pill-loading" id="status-pill">● Loading</span></div>
+</div>
+
+<div class="main" id="main-content" style="display:none">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('overview')">① Overview</button>
+    <button class="tab" onclick="switchTab('timemachine')">② Time Machine</button>
+    <button class="tab" onclick="switchTab('percentile')">③ Percentile</button>
+    <button class="tab" onclick="switchTab('seasonality')">④ Seasonality</button>
+    <button class="tab" onclick="switchTab('decay')">⑤ Strip Decay</button>
+    <button class="tab" onclick="switchTab('scorecard')">⑥ Scorecard</button>
+  </div>
+
+  <div id="tab-overview" class="panel active">
+    <div class="stats" id="ov-stats"></div>
+    <div class="g2">
+      <div class="card sp2"><div class="ct">WTI 12-MO STRIP AVERAGE — FULL HISTORY 2010–PRESENT</div><div class="cs">Monthly avg of 12 front contracts. Red dashed = current level.</div><div style="position:relative"><canvas id="ch-ov-wti" height="150"></canvas></div></div>
+      <div class="card sp2"><div class="ct">HENRY HUB 12-MO STRIP AVERAGE — FULL HISTORY 2010–PRESENT</div><div class="cs">Monthly avg of 12 front HH contracts. Includes COVID crash, Ukraine spike, LNG export cycle.</div><div style="position:relative"><canvas id="ch-ov-hh" height="150"></canvas></div></div>
+    </div>
+    <div class="insight" id="ov-insight"></div>
+  </div>
+
+  <div id="tab-timemachine" class="panel">
+    <div class="ctrl-row">
+      <label style="font-size:10px;color:var(--muted);font-weight:700">COMPARE DATE:</label>
+      <input type="month" id="tm-date" min="2010-01" value="2022-06"/>
+      <div class="cg">
+        <button class="cb oil" id="tm-oil-btn" onclick="setTMC('oil')">WTI Oil</button>
+        <button class="cb" id="tm-gas-btn" onclick="setTMC('gas')">Henry Hub</button>
+      </div>
+      <button class="cb on" onclick="renderTimeMachine()">▶ Compare</button>
+      <span style="font-size:10px;color:var(--muted)" id="tm-info"></span>
+    </div>
+    <div class="stats" id="tm-stats"></div>
+    <div class="insight" id="tm-insight"></div>
+    <div class="g2">
+      <div class="card sp2"><div class="ct" id="tm-ct">FORWARD CURVE — SELECTED DATE vs TODAY</div><div class="cs">Bars = selected date. Line = today.</div><div style="position:relative"><canvas id="ch-tm-curve" height="185"></canvas></div></div>
+      <div class="card"><div class="ct">HISTORICAL FREQUENCY — WHERE THIS LEVEL SITS</div><div style="position:relative"><canvas id="ch-tm-hist" height="195"></canvas></div></div>
+      <div class="card"><div class="ct">P&amp;L SINCE HEDGE DATE</div><div class="cs">Strip change vs the level on selected date.</div><div style="position:relative"><canvas id="ch-tm-pnl" height="195"></canvas></div></div>
+    </div>
+    <div class="card"><div class="ct">CONTRACT DETAIL TABLE</div><table><thead><tr id="tm-thead"></tr></thead><tbody id="tm-tbody"></tbody></table></div>
+  </div>
+
+  <div id="tab-percentile" class="panel">
+    <div class="ctrl-row">
+      <div class="cg"><button class="cb oil" id="pct-oil" onclick="setPctC('oil')">WTI Oil</button><button class="cb" id="pct-gas" onclick="setPctC('gas')">Henry Hub</button></div>
+      <div class="cg"><button class="cb on" id="pct-12" onclick="setPctN(12)">12-Mo</button><button class="cb" id="pct-24" onclick="setPctN(24)">24-Mo</button><button class="cb" id="pct-6" onclick="setPctN(6)">6-Mo</button></div>
+    </div>
+    <div class="stats" id="pct-stats"></div>
+    <div class="insight" id="pct-insight"></div>
+    <div class="g2">
+      <div class="card"><div class="ct">DISTRIBUTION OF MONTHLY STRIP AVERAGES</div><div style="position:relative"><canvas id="ch-pct-hist" height="210"></canvas></div></div>
+      <div class="card"><div class="ct">ANNUAL P25–MEDIAN–P75 RANGE BY YEAR</div><div style="position:relative"><canvas id="ch-pct-box" height="210"></canvas></div></div>
+    </div>
+    <div class="card"><div class="ct">PERCENTILE RANK BY LOOKBACK WINDOW</div><div id="pct-era" style="margin-top:8px"></div></div>
+    <div class="card"><div class="ct">ANNUAL STATISTICS TABLE</div>
+      <table><thead><tr><th class="L">Year</th><th>Min</th><th>P25</th><th>Median</th><th>P75</th><th>Max</th><th>Mean</th><th>vs Current</th></tr></thead><tbody id="pct-tbl"></tbody></table></div>
+  </div>
+
+  <div id="tab-seasonality" class="panel">
+    <div class="ctrl-row">
+      <div class="cg"><button class="cb oil" id="seas-oil" onclick="setSeasC('oil')">WTI Oil</button><button class="cb" id="seas-gas" onclick="setSeasC('gas')">Henry Hub</button></div>
+      <label style="font-size:10px;color:var(--muted);font-weight:700;margin-left:8px">FROM:</label>
+      <select id="seas-from"><option value="2010">2010</option><option value="2015">2015</option><option value="2018">2018</option><option value="2020">2020</option></select>
+      <button class="cb on" onclick="renderSeasonality()">▶ Update</button>
+    </div>
+    <div class="insight" id="seas-insight"></div>
+    <div class="g2">
+      <div class="card"><div class="ct">AVG STRIP BY HEDGE ENTRY MONTH</div><div style="position:relative"><canvas id="ch-seas-avg" height="210"></canvas></div></div>
+      <div class="card"><div class="ct">AVG STRIP DRIFT 3-MO AFTER HEDGE</div><div class="cs">Negative = strip fell (hedge added value). Best entry months = most negative bars.</div><div style="position:relative"><canvas id="ch-seas-drift" height="210"></canvas></div></div>
+    </div>
+    <div class="card sp2"><div class="ct">STRIP HEATMAP — YEAR × MONTH</div><div class="cs">Green = high strip (good to hedge). Red = low.</div><div id="seas-hm" style="overflow-x:auto;margin-top:8px"></div></div>
+  </div>
+
+  <div id="tab-decay" class="panel">
+    <div class="ctrl-row">
+      <div class="cg"><button class="cb oil" id="dec-oil" onclick="setDecC('oil')">WTI Oil</button><button class="cb" id="dec-gas" onclick="setDecC('gas')">Henry Hub</button></div>
+      <label style="font-size:10px;color:var(--muted);font-weight:700">DELIVERY YEAR:</label>
+      <select id="dec-year"><option value="2026" selected>2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+      <button class="cb on" onclick="renderDecay()">▶ Update</button>
+    </div>
+    <div class="insight" id="dec-insight"></div>
+    <div class="g2">
+      <div class="card sp2"><div class="ct" id="dec-ct">STRIP PRICE PATH — HOW ANNUAL STRIP HAS EVOLVED OVER TIME</div><div class="cs">Each point = avg of delivery-year contracts as priced from that month. Green dot = historical best entry.</div><div style="position:relative"><canvas id="ch-dec-path" height="205"></canvas></div></div>
+      <div class="card"><div class="ct">LOOK-BACK: STRIP THEN vs NOW</div><div id="dec-lb" style="margin-top:6px"></div></div>
+      <div class="card"><div class="ct">CONTANGO / BACKWARDATION HISTORY (C12 − C1)</div><div style="position:relative"><canvas id="ch-dec-cg" height="195"></canvas></div></div>
+    </div>
+  </div>
+
+  <div id="tab-scorecard" class="panel">
+    <div class="stats" id="sc-stats"></div>
+    <div class="g2">
+      <div class="card"><div class="ct">WTI OIL — HEDGE TIMING GATES</div><div id="sc-oil-g"></div></div>
+      <div class="card"><div class="ct">HENRY HUB GAS — HEDGE TIMING GATES</div><div id="sc-gas-g"></div></div>
+    </div>
+    <div class="card"><div class="ct">RECOMMENDED HEDGE ACTION</div><div id="sc-action" class="insight" style="margin-bottom:0;border-left-color:#22c55e"></div></div>
+    <div class="card"><div class="ct">HISTORICAL BENCHMARK TABLE</div>
+      <table><thead><tr><th class="L">Benchmark</th><th>WTI 12-Mo</th><th>HH 12-Mo</th><th>WTI vs Now</th><th>HH vs Now</th></tr></thead><tbody id="sc-bench"></tbody></table></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const KEY='clNi93nfcGdrKTdffUjRK2U6R8luhRZbYcEydnGT';
+
+// Netlify HTTPS origin — direct EIA API calls work without any proxy
+const PROXY=[u=>u];
+let PX=0;
+
+let OIL={},GAS={},PERIODS=[];
+let CH={};
+
+const $=id=>document.getElementById(id);
+const f$=(v,d=2)=>v==null?'—':'$'+(+v).toFixed(d);
+const MOS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ML=p=>{if(!p)return'';const[y,m]=p.split('-');return MOS[+m-1]+' '+y.slice(2);};
+
+function ldr(msg,pct,det,ser){
+  if(msg)$('ld-msg').textContent=msg;
+  if(pct!=null)$('ld-fill').style.width=pct+'%';
+  if(det)$('ld-detail').innerHTML=det;
+  if(ser!=null)$('ld-series').textContent=ser;
+}
+
+function dCh(id){if(CH[id]){CH[id].destroy();delete CH[id];}}
+
+// ─── FETCH WITH PROXY FALLBACK ──────────────────────────────
+async function fetchSeries(sid){
+  // Use v2/seriesid/ — simplest URL, no [] chars needed
+  const base=`https://api.eia.gov/v2/seriesid/${sid}?api_key=${KEY}&length=5000&start=2010-01`;
+  let last='';
+  for(let pi=PX;pi<PROXY.length;pi++){
+    const url=PROXY[pi](base);
+    try{
+      const r=await fetch(url);
+      if(!r.ok){last=`HTTP ${r.status}`;continue;}
+      const j=await r.json();
+      // v2/seriesid returns {response:{data:[{period,value,...}]}} or legacy {series:[{data:[...]}]}
+      let rows=j?.response?.data||j?.series?.[0]?.data||[];
+      if(rows.length>0){PX=pi;return rows;}
+      last='empty';
+    }catch(e){last=e.message||String(e);}
+  }
+  console.warn('Failed',sid,last);
+  return [];
+}
+
+// ─── LOAD ALL 24 SERIES ─────────────────────────────────────
+async function loadData(){
+  ldr('Connecting to EIA API...',5);
+  const oIds=Array.from({length:12},(_,i)=>`PET.RCLC${i+1}.M`);
+  const gIds=Array.from({length:12},(_,i)=>`NG.RNGC${i+1}.M`);
+  let done=0;const tot=24;
+  const prog=()=>{done++;ldr(null,5+done/tot*82,null,`Loaded ${done}/${tot} series`);};
+
+  async function fetchBatch(ids,store,prefix,suffix){
+    for(let b=0;b<ids.length;b+=4){
+      const batch=ids.slice(b,b+4);
+      const res=await Promise.all(batch.map(id=>fetchSeries(id).then(d=>{prog();return{id,d};})));
+      res.forEach(({id,d})=>{
+        const n=parseInt(id.replace(prefix,'').replace(suffix,''));
+        d.forEach(row=>{
+          const p=String(row.period||'').slice(0,7);
+          if(!p||p.length<7)return;
+          if(!store[p])store[p]={};
+          const v=parseFloat(row.value??row[0]);
+          if(!isNaN(v))store[p][n]=v;
+        });
+      });
+    }
+  }
+
+  ldr('Step 1/2 — WTI crude oil futures (RCLC1–RCLC12)...',5);
+  await fetchBatch(oIds,OIL,'PET.RCLC','.M');
+  ldr('Step 2/2 — Henry Hub gas futures (RNGC1–RNGC12)...',45);
+  await fetchBatch(gIds,GAS,'NG.RNGC','.M');
+
+  ldr('Processing...',90);
+  PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
+    .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
+
+  if(PERIODS.length<12){
+    showErr(
+      `Loaded only ${PERIODS.length} data periods. EIA API may be temporarily unavailable.`,
+      `The EIA API occasionally has brief outages. Wait 60 seconds and click Retry.<br>
+       If the issue persists, check <a href="https://www.eia.gov/opendata/" target="_blank" style="color:var(--oil)">api.eia.gov</a> status or rotate the API key in index.html.`
+    );return;
+  }
+
+  $('loader').classList.add('hidden');
+  $('main-content').style.display='block';
+  $('status-pill').textContent='● Live';
+  $('status-pill').className='pill pill-ok';
+  $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${PERIODS[PERIODS.length-1]}`;
+  ldr('Done',100);
+  renderAll();
+}
+
+function showErr(msg,fix){
+  $('loader').classList.add('hidden');
+  $('err-panel').style.display='block';
+  $('err-body').innerHTML=`${msg}<br><br><strong>Fix:</strong><br>${fix}`;
+  $('status-pill').textContent='● Error';$('status-pill').className='pill pill-err';
+}
+
+function retryLoad(){
+  PX=0;OIL={};GAS={};PERIODS=[];
+  $('err-panel').style.display='none';
+  $('loader').classList.remove('hidden');
+  $('ld-fill').style.width='0';
+  loadData();
+}
+
+function renderAll(){
+  renderOverview();renderTimeMachine();renderPercentile();
+  renderSeasonality();renderDecay();renderScorecard();
+}
+
+// ─── STRIP MATH ────────────────────────────────────────────
+function stripArr(p,c,n=12){
+  const s=c==='oil'?OIL[p]:GAS[p];if(!s)return[];
+  return Array.from({length:n},(_,i)=>{const v=s[i+1];return(v!=null&&!isNaN(v))?+v:null;});
+}
+function stripAvg(p,c,n=12){
+  const a=stripArr(p,c,n).filter(v=>v!=null);
+  return a.length>=Math.min(4,n)?a.reduce((x,y)=>x+y)/a.length:null;
+}
+function allAvgs(c,n=12){return PERIODS.map(p=>({p,v:stripAvg(p,c,n)})).filter(d=>d.v!=null);}
+function pctile(val,arr){const s=[...arr].filter(v=>v!=null).sort((a,b)=>a-b);return Math.round(s.filter(v=>v<val).length/s.length*100);}
+function quartiles(vals){
+  const s=[...vals].filter(v=>v!=null).sort((a,b)=>a-b);
+  if(!s.length)return null;
+  const q=p=>s[Math.floor(p*(s.length-1))];
+  return{min:s[0],p25:q(.25),p50:q(.5),p75:q(.75),max:s[s.length-1],mean:s.reduce((a,b)=>a+b)/s.length};
+}
+
+// ─── BASE CHART ────────────────────────────────────────────
+const TC='#475569';
+const bO={
+  responsive:true,animation:{duration:300},
+  plugins:{
+    legend:{labels:{color:'#94a3b8',font:{family:'IBM Plex Mono',size:10},boxWidth:12,padding:12}},
+    tooltip:{backgroundColor:'#1c2a42',borderColor:'#253d61',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:10,titleFont:{family:'IBM Plex Mono',size:11},bodyFont:{family:'IBM Plex Mono',size:10}}
+  },
+  scales:{
+    x:{grid:{color:'#1e305033'},ticks:{color:TC,font:{family:'IBM Plex Mono',size:9},maxRotation:45}},
+    y:{grid:{color:'#1e305066'},ticks:{color:TC,font:{family:'IBM Plex Mono',size:9}},border:{dash:[3,3]}}
+  }
+};
+
+// ── ① OVERVIEW ────────────────────────────────────────────
+function renderOverview(){
+  if(!PERIODS.length)return;
+  const lat=PERIODS[PERIODS.length-1];
+  const aO=allAvgs('oil'),aG=allAvgs('gas');
+  const oV=aO.map(d=>d.v),gV=aG.map(d=>d.v);
+  const cO=stripAvg(lat,'oil'),cG=stripAvg(lat,'gas');
+  const oQ=quartiles(oV),gQ=quartiles(gV);
+  const oP=pctile(cO,oV),gP=pctile(cG,gV);
+
+  $('ov-stats').innerHTML=`
+    <div class="stat"><div class="sl">Data Loaded</div><div class="sv" style="font-size:16px">${PERIODS.length} months</div><div class="ss">2010–present</div></div>
+    <div class="stat"><div class="sl">WTI 12-Mo Strip</div><div class="sv" style="color:var(--oil)">${f$(cO)}<span style="font-size:13px">/bbl</span></div><div class="ss">${oP}th pct vs 2010+</div></div>
+    <div class="stat"><div class="sl">HH 12-Mo Strip</div><div class="sv" style="color:var(--gas)">${f$(cG,2)}<span style="font-size:13px">/MMBtu</span></div><div class="ss">${gP}th pct vs 2010+</div></div>
+    <div class="stat"><div class="sl">WTI Range</div><div class="sv" style="font-size:12px;padding-top:4px">${f$(oQ?.min)}–${f$(oQ?.max)}</div><div class="ss">15yr min/max</div></div>
+    <div class="stat"><div class="sl">HH Range</div><div class="sv" style="font-size:12px;padding-top:4px">${f$(gQ?.min,2)}–${f$(gQ?.max,2)}</div><div class="ss">15yr min/max</div></div>`;
+
+  dCh('ov-o');dCh('ov-g');
+  const mk=(id,data,col,curV)=>new Chart($(id).getContext('2d'),{type:'line',data:{labels:data.map(d=>d.p.slice(0,7)),datasets:[{label:col==='#f59e0b'?'WTI':'HH',data:data.map(d=>d.v),borderColor:col,borderWidth:1.5,pointRadius:0,fill:false,tension:0.2}]},options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{c:{type:'line',yMin:curV,yMax:curV,borderColor:col+'66',borderWidth:1.5,borderDash:[5,4]}}}},scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+  CH['ov-o']=mk('ch-ov-wti',aO,'#f59e0b',cO);
+  CH['ov-g']=mk('ch-ov-hh',aG,'#06b6d4',cG);
+
+  const oV2=oP>=75?'top quartile':oP>=50?'above median':oP>=25?'below median':'multi-year low';
+  const gV2=gP>=75?'top quartile':gP>=50?'above median':gP>=25?'below median':'multi-year low';
+  $('ov-insight').innerHTML=`
+    <strong>WTI:</strong> ${f$(cO)}/bbl — ${oV2} (${oP}th pct). Range: ${f$(oQ?.min)}–${f$(oQ?.max)}.
+    Signal: ${oP>=60?'<span class="hi">FAVORABLE — add swaps/floors now</span>':oP>=40?'<span class="am">NEUTRAL — layer in tranches</span>':'<span class="lo">BELOW MEDIAN — use collars, not fixed swaps</span>'}.<br/><br/>
+    <strong>HH:</strong> ${f$(cG,2)}/MMBtu — ${gV2} (${gP}th pct). Range: ${f$(gQ?.min,2)}–${f$(gQ?.max,2)}.
+    Signal: ${gP>=60?'<span class="hi">FAVORABLE — add gas hedges</span>':gP>=40?'<span class="am">NEUTRAL — focus on winter delivery months</span>':'<span class="lo">BELOW MEDIAN — floors preferred, monitor for seasonal lift</span>'}.`;
+}
+
+// ── ② TIME MACHINE ────────────────────────────────────────
+let TMC='oil';
+function setTMC(c){TMC=c;$('tm-oil-btn').className='cb'+(c==='oil'?' oil':'');$('tm-gas-btn').className='cb'+(c==='gas'?' gas':'');renderTimeMachine();}
+
+function renderTimeMachine(){
+  if(!PERIODS.length)return;
+  const sel=$('tm-date').value,c=TMC,lat=PERIODS[PERIODS.length-1];
+  const col=c==='oil'?'#f59e0b':'#06b6d4',unit=c==='oil'?'$/bbl':'$/MMBtu';
+  const avail=PERIODS.filter(p=>p<=sel);
+  const selP=avail[avail.length-1]||PERIODS[0];
+  $('tm-info').textContent='→ '+ML(selP);
+
+  const sArr=stripArr(selP,c),cArr=stripArr(lat,c);
+  const sAvg=stripAvg(selP,c),cAvg=stripAvg(lat,c);
+  const aV=allAvgs(c).map(d=>d.v);
+  const sP=pctile(sAvg,aV),cP2=pctile(cAvg,aV);
+  const diff=sAvg&&cAvg?+(sAvg-cAvg).toFixed(2):null;
+
+  $('tm-stats').innerHTML=`
+    <div class="stat"><div class="sl">${ML(selP)}</div><div class="sv" style="color:${col}">${f$(sAvg,2)}</div><div class="ss">${sP}th pct</div></div>
+    <div class="stat"><div class="sl">Today (${ML(lat)})</div><div class="sv" style="color:${col}">${f$(cAvg,2)}</div><div class="ss">${cP2}th pct</div></div>
+    <div class="stat"><div class="sl">Difference</div><div class="sv" style="color:${diff==null?'inherit':diff>0?'#22c55e':'#ef4444'}">${diff!=null?(diff>0?'+':'')+diff.toFixed(2):'—'}</div><div class="ss">${diff!=null?diff>0?'Selected was higher':'Current is higher':''}</div></div>
+    <div class="stat"><div class="sl">Selected Pct</div><div class="sv" style="color:${sP>=50?'#22c55e':'#f59e0b'}">${sP}th</div><div class="ss">vs 2010+</div></div>
+    <div class="stat"><div class="sl">Current Pct</div><div class="sv" style="color:${cP2>=50?'#22c55e':'#f59e0b'}">${cP2}th</div><div class="ss">vs 2010+</div></div>`;
+
+  $('tm-insight').innerHTML=`<strong>${ML(selP)} vs Today:</strong>
+    Strip on ${ML(selP)} was <strong>${f$(sAvg,2)}</strong> ${unit} (${sP}th pct). Today: <strong>${f$(cAvg,2)}</strong> (${cP2}th pct).
+    ${diff!=null?diff>0?`<span class="lo">Prices fell ${Math.abs(diff).toFixed(2)} since then — hedging in ${ML(selP)} would have been a better entry.</span>`:`<span class="hi">Prices rose ${Math.abs(diff).toFixed(2)} since then — today is a better entry than ${ML(selP)}.</span>`:''}`;
+
+  dCh('tm-c');dCh('tm-h');dCh('tm-p');
+  const labs=Array.from({length:12},(_,i)=>`C${i+1}`);
+  CH['tm-c']=new Chart($('ch-tm-curve').getContext('2d'),{type:'bar',data:{labels:labs,datasets:[
+    {label:`${ML(selP)}`,data:sArr,backgroundColor:col+'88',borderColor:col,borderWidth:1,borderRadius:3},
+    {label:`Today (${ML(lat)})`,data:cArr,type:'line',borderColor:'#94a3b8',borderWidth:2,pointRadius:2,fill:false,tension:0.2}
+  ]},options:{...bO,scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+
+  const hV=aV.filter(v=>v);const mn=Math.min(...hV),mx=Math.max(...hV);
+  const B=22,bS=(mx-mn)/B,cts=Array(B).fill(0);
+  hV.forEach(v=>{const b=Math.min(Math.floor((v-mn)/bS),B-1);cts[b]++;});
+  const sB=Math.min(Math.floor((sAvg-mn)/bS),B-1);
+  const cB2=Math.min(Math.floor((cAvg-mn)/bS),B-1);
+  CH['tm-h']=new Chart($('ch-tm-hist').getContext('2d'),{type:'bar',data:{
+    labels:Array.from({length:B},(_,i)=>'$'+(mn+i*bS).toFixed(0)),
+    datasets:[{label:'Months',data:cts,backgroundColor:cts.map((_,i)=>i===sB?col:i===cB2?'#22c55ecc':'#334155'),borderRadius:2}]
+  },options:{...bO,plugins:{...bO.plugins,legend:{display:false}}}});
+
+  const tp=PERIODS.filter(p=>p>=selP&&p<=lat);
+  const pnl=tp.map(p=>{const v=stripAvg(p,c);return v&&sAvg?+(v-sAvg).toFixed(2):null;});
+  const last=pnl[pnl.length-1];
+  CH['tm-p']=new Chart($('ch-tm-pnl').getContext('2d'),{type:'line',data:{labels:tp.map(ML),datasets:[{
+    label:'Strip vs hedge level',data:pnl,borderColor:last<0?'#22c55e':'#ef4444',borderWidth:2,
+    pointRadius:0,fill:true,backgroundColor:(last<0?'#22c55e':'#ef4444')+'18',tension:0.2
+  }]},options:{...bO,plugins:{...bO.plugins,legend:{display:false},annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#64748b88',borderWidth:1}}}},
+    scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+'$'+v}}}}});
+
+  $('tm-thead').innerHTML=`<th class="L">Contract</th><th>${ML(selP)}</th><th>Today</th><th>Δ</th><th>Δ%</th>`;
+  $('tm-tbody').innerHTML=sArr.map((v,i)=>{
+    const cur=cArr[i],d=cur&&v?+(cur-v).toFixed(2):null,pD=v&&cur?(cur/v-1)*100:null;
+    return`<tr><td class="L">C${i+1}</td><td style="color:${col}">${v!=null?'$'+v.toFixed(2):'—'}</td><td>${cur!=null?'$'+cur.toFixed(2):'—'}</td>
+      <td style="color:${d==null?'inherit':d>0?'#22c55e':'#ef4444'}">${d!=null?(d>0?'+':'')+d.toFixed(2):'—'}</td>
+      <td style="color:${pD==null?'inherit':pD>0?'#22c55e':'#ef4444'}">${pD!=null?(pD>0?'+':'')+pD.toFixed(1)+'%':'—'}</td></tr>`;
+  }).join('');
+}
+
+// ── ③ PERCENTILE ─────────────────────────────────────────
+let PCTC='oil',PCTN=12;
+function setPctC(c){PCTC=c;$('pct-oil').className='cb'+(c==='oil'?' oil':'');$('pct-gas').className='cb'+(c==='gas'?' gas':'');renderPercentile();}
+function setPctN(n){PCTN=n;['6','12','24'].forEach(x=>$('pct-'+x).className='cb'+(n===+x?' on':''));renderPercentile();}
+
+function renderPercentile(){
+  if(!PERIODS.length)return;
+  const c=PCTC,n=PCTN,lat=PERIODS[PERIODS.length-1];
+  const col=c==='oil'?'#f59e0b':'#06b6d4';
+  const aD=allAvgs(c,n),aV=aD.map(d=>d.v),curV=stripAvg(lat,c,n);
+  if(!curV)return;
+  const cp=pctile(curV,aV),q=quartiles(aV);
+
+  $('pct-stats').innerHTML=`
+    <div class="stat"><div class="sl">${n}-Mo Strip</div><div class="sv" style="color:${col}">${f$(curV,2)}</div><div class="ss">${ML(lat)}</div></div>
+    <div class="stat"><div class="sl">Percentile</div><div class="sv" style="color:${cp>=60?'#22c55e':cp>=35?'#f59e0b':'#ef4444'}">${cp}th</div><div class="ss">of ${aV.length} months</div></div>
+    <div class="stat"><div class="sl">Median</div><div class="sv" style="font-size:15px">${f$(q?.p50,2)}</div><div class="ss">${curV>q?.p50?'+'+(curV-q.p50).toFixed(2)+' above':'-'+(q.p50-curV).toFixed(2)+' below'}</div></div>
+    <div class="stat"><div class="sl">Min/Max</div><div class="sv" style="font-size:12px;padding-top:4px">${f$(q?.min,2)}–${f$(q?.max,2)}</div><div class="ss">15yr range</div></div>`;
+
+  dCh('ph');dCh('pb');
+  const mn2=Math.floor(q.min),mx2=Math.ceil(q.max),B=24,bS2=(mx2-mn2)/B;
+  const cts2=Array(B).fill(0);aV.forEach(v=>{const b=Math.min(Math.floor((v-mn2)/bS2),B-1);cts2[b]++;});
+  const cb=Math.min(Math.floor((curV-mn2)/bS2),B-1);
+  CH['ph']=new Chart($('ch-pct-hist').getContext('2d'),{type:'bar',data:{
+    labels:Array.from({length:B},(_,i)=>'$'+(mn2+i*bS2).toFixed(0)),
+    datasets:[{label:'Frequency',data:cts2,backgroundColor:cts2.map((_,i)=>i===cb?col:col+'33'),borderRadius:2}]
+  },options:{...bO,plugins:{...bO.plugins,legend:{display:false}},scales:{...bO.scales,y:{...bO.scales.y,title:{display:true,text:'# Months',color:TC,font:{size:9}}}}}});
+
+  const byY={};aD.forEach(({p,v})=>{const y=p.slice(0,4);if(!byY[y])byY[y]=[];byY[y].push(v);});
+  const yrs=Object.keys(byY).sort();
+  const yQ=yrs.map(y=>quartiles(byY[y]));
+  CH['pb']=new Chart($('ch-pct-box').getContext('2d'),{type:'bar',data:{labels:yrs,datasets:[
+    {label:'P25–P75',data:yQ.map(d=>d?[d.p25,d.p75]:null),backgroundColor:col+'44',borderColor:col+'88',borderWidth:1,borderRadius:2},
+    {label:'Median',data:yQ.map(d=>d?.p50),type:'line',borderColor:col,borderWidth:2,pointRadius:3,pointBackgroundColor:col,fill:false,tension:0}
+  ]},options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{c:{type:'line',yMin:curV,yMax:curV,borderColor:'#ef444488',borderWidth:1.5,borderDash:[4,3]}}}},
+    scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+
+  const eras=[{l:'Full (2010+)',s:'2010-01'},{l:'Post-COVID (2021+)',s:'2021-01'},{l:'Post-Ukraine (2022+)',s:'2022-06'},{l:'Last 3 years',s:PERIODS[Math.max(0,PERIODS.length-36)]},{l:'Last 12 months',s:PERIODS[Math.max(0,PERIODS.length-12)]}];
+  const emx=Math.max(...eras.map(e=>Math.max(...aD.filter(d=>d.p>=e.s).map(d=>d.v))));
+  $('pct-era').innerHTML=eras.map(e=>{
+    const sv=aD.filter(d=>d.p>=e.s).map(d=>d.v);if(!sv.length)return'';
+    const ep=pctile(curV,sv),w=Math.round(curV/emx*100);
+    const ec=ep>=60?'22c55e':ep>=35?'f59e0b':'ef4444';
+    return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="width:170px;font-size:10px;color:var(--sub)">${e.l}</div>
+      <div style="flex:1;background:var(--bg3);border-radius:2px;height:14px;position:relative;overflow:hidden">
+        <div style="position:absolute;left:0;top:0;height:100%;width:${w}%;background:${col}55"></div>
+        <div style="position:absolute;left:${w}%;top:0;height:100%;width:2px;background:${col}"></div>
+      </div>
+      <div style="width:65px;text-align:right;font-size:11px">${f$(curV,2)}</div>
+      <div style="width:65px;text-align:right;font-size:11px;color:#${ec}">${ep}th pct</div>
+    </div>`;
+  }).join('');
+
+  $('pct-tbl').innerHTML=yrs.map(y=>{
+    const bq=quartiles(byY[y]);if(!bq)return'';
+    const diff=+(bq.mean-curV).toFixed(2);
+    return`<tr><td class="L">${y}</td><td>${f$(bq.min,2)}</td><td>${f$(bq.p25,2)}</td>
+      <td>${f$(bq.p50,2)}</td><td>${f$(bq.p75,2)}</td><td>${f$(bq.max,2)}</td><td>${f$(bq.mean,2)}</td>
+      <td style="color:${diff>0?'#ef4444':'#22c55e'}">${diff>0?'+'+diff.toFixed(2):diff.toFixed(2)}</td></tr>`;
+  }).join('');
+
+  const verb=cp>=75?'top quartile — historically elevated':cp>=50?'above long-run median':cp>=25?'below median':'multi-year low';
+  $('pct-insight').className=`insight${c==='gas'?' gas':''}`;
+  $('pct-insight').innerHTML=`<strong>${c==='oil'?'WTI':'HH'} ${n}-Mo Strip:</strong>
+    At <strong>${f$(curV,2)}</strong>, today is at the <strong>${cp}th percentile</strong> of ${aV.length} monthly readings since 2010 (${verb}). 
+    Median = ${f$(q?.p50,2)} — today is ${Math.abs(curV-q.p50).toFixed(2)} ${curV>=q.p50?'above':'below'} median.
+    ${cp>=55?'<span class="hi">Historical record supports adding hedges at current levels.</span>':'<span class="lo">Strip below median — collars and floors preferred over fixed-price swaps.</span>'}`;
+}
+
+// ── ④ SEASONALITY ─────────────────────────────────────────
+let SC='oil';
+function setSeasC(c){SC=c;$('seas-oil').className='cb'+(c==='oil'?' oil':'');$('seas-gas').className='cb'+(c==='gas'?' gas':'');renderSeasonality();}
+
+function renderSeasonality(){
+  if(!PERIODS.length)return;
+  const c=SC,fy=parseInt($('seas-from').value||'2010');
+  const col=c==='oil'?'#f59e0b':'#06b6d4';
+  const byMo=Array.from({length:12},()=>[]),drift=Array.from({length:12},()=>[]);
+  PERIODS.filter(p=>parseInt(p.slice(0,4))>=fy).forEach(p=>{
+    const mo=parseInt(p.slice(5,7))-1,v=stripAvg(p,c);
+    if(v!=null)byMo[mo].push(v);
+    const fp=PERIODS.find(x=>Math.round((new Date(x+'-01')-new Date(p+'-01'))/2592000000)===3);
+    if(fp){const fv=stripAvg(fp,c);if(v&&fv)drift[mo].push(+(fv-v).toFixed(2));}
+  });
+  const mA=byMo.map(a=>a.length?a.reduce((x,y)=>x+y)/a.length:null);
+  const dA=drift.map(a=>a.length?a.reduce((x,y)=>x+y)/a.length:null);
+  const maxM=mA.indexOf(Math.max(...mA.filter(v=>v)));
+  const minM=mA.indexOf(Math.min(...mA.filter(v=>v)));
+  const bestD=dA.indexOf(Math.min(...dA.filter(v=>v!=null)));
+
+  dCh('sa');dCh('sd');
+  CH['sa']=new Chart($('ch-seas-avg').getContext('2d'),{type:'bar',data:{labels:MOS,datasets:[{
+    label:'Avg strip by entry month',data:mA,borderRadius:3,
+    backgroundColor:mA.map((_,i)=>i===maxM?'#22c55ecc':i===minM?'#ef4444cc':col+'77'),
+    borderColor:mA.map((_,i)=>i===maxM?'#22c55e':i===minM?'#ef4444':col),borderWidth:1
+  }]},options:{...bO,plugins:{...bO.plugins,legend:{display:false}},scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+
+  CH['sd']=new Chart($('ch-seas-drift').getContext('2d'),{type:'bar',data:{labels:MOS,datasets:[{
+    label:'3-mo drift after hedge',data:dA,borderRadius:3,
+    backgroundColor:dA.map(v=>v==null?'#33415544':v<0?'#22c55e66':'#ef444466'),
+    borderColor:dA.map(v=>v==null?'#334155':v<0?'#22c55e':'#ef4444'),borderWidth:1
+  }]},options:{...bO,plugins:{...bO.plugins,legend:{display:false},annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#64748b88',borderWidth:1}}}},
+    scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+'$'+v}}}}});
+
+  // Heatmap
+  const hmY=[];PERIODS.filter(p=>parseInt(p.slice(0,4))>=fy).forEach(p=>{const y=p.slice(0,4);if(!hmY.includes(y))hmY.push(y);});
+  const hV=PERIODS.map(p=>stripAvg(p,c)).filter(v=>v);
+  const hMn=Math.min(...hV),hMx=Math.max(...hV);
+  const hC=v=>{if(!v)return'#1c2a42';const t=(v-hMn)/(hMx-hMn);const L=(a,b,x)=>Math.round(a+x*(b-a));
+    if(t<.5){return`rgb(${L(239,251,t*2)},${L(68,191,t*2)},${L(68,36,t*2)})`;}
+    return`rgb(${L(251,34,(t-.5)*2)},${L(191,197,(t-.5)*2)},${L(36,94,(t-.5)*2)})`;};
+  const cW=Math.max(26,Math.floor(660/hmY.length));
+  let h=`<table style="border-collapse:collapse;font-size:10px"><thead><tr><th class="L" style="padding:2px 6px;color:var(--muted)">Mo</th>`;
+  hmY.forEach(y=>{h+=`<th style="padding:2px 2px;color:var(--muted);min-width:${cW}px;text-align:center">${y}</th>`;});h+='</tr></thead><tbody>';
+  MOS.forEach((mo,i)=>{h+=`<tr><td class="L" style="padding:2px 6px;color:var(--sub)">${mo}</td>`;
+    hmY.forEach(y=>{const p=`${y}-${String(i+1).padStart(2,'0')}`,v=stripAvg(p,c);
+      h+=`<td style="background:${hC(v)};padding:2px 2px;text-align:center;font-size:9px;color:rgba(0,0,0,.8);min-width:${cW}px">${v?v.toFixed(0):''}</td>`;});
+    h+='</tr>';});h+='</tbody></table>';
+  $('seas-hm').innerHTML=h;
+
+  $('seas-insight').className=`insight${c==='gas'?' gas':''}`;
+  $('seas-insight').innerHTML=`<strong>Seasonality (${fy}+):</strong>
+    Richest hedge entry month: <strong class="hi">${MOS[maxM]}</strong>. Weakest: <strong class="lo">${MOS[minM]}</strong>.
+    Best post-hedge drift: <strong class="hi">${MOS[bestD]}</strong> — strips tend to fall most after entry that month.
+    ${c==='gas'?'Gas: Q2 spring shoulder historically best entry — winter premium prices in, but summer demand hasn\'t hit yet.':'Oil: Q2 (driving season build) and pre-winter typically richest. Q1 refinery maintenance tends to weaken the strip.'}`;
+}
+
+// ── ⑤ STRIP DECAY ─────────────────────────────────────────
+let DC='oil';
+function setDecC(c){DC=c;$('dec-oil').className='cb'+(c==='oil'?' oil':'');$('dec-gas').className='cb'+(c==='gas'?' gas':'');renderDecay();}
+
+function renderDecay(){
+  if(!PERIODS.length)return;
+  const c=DC,tY=parseInt($('dec-year').value||'2026');
+  const col=c==='oil'?'#f59e0b':'#06b6d4',unit=c==='oil'?'$/bbl':'$/MMBtu';
+  const lat=PERIODS[PERIODS.length-1];
+
+  const pd=[];
+  PERIODS.forEach(p=>{
+    const pD=new Date(p+'-01'),st=c==='oil'?OIL[p]:GAS[p];if(!st)return;
+    let sm=0,cn=0;
+    for(let m=1;m<=12;m++){
+      const td=new Date(`${tY}-${String(m).padStart(2,'0')}-01`);
+      const ah=Math.round((td-pD)/2592000000);
+      if(ah>=1&&ah<=12){const v=st[ah];if(v!=null&&!isNaN(v)){sm+=v;cn++;}}
+    }
+    if(cn>=3)pd.push({p,v:+(sm/cn).toFixed(2)});
+  });
+  pd.sort((a,b)=>a.p>b.p?1:-1);
+  const pV=pd.map(d=>d.v);
+  const mxV=Math.max(...pV.filter(v=>v));
+  const mxI=pV.indexOf(mxV);
+  const curV=pd[pd.length-1]?.v;
+
+  dCh('dp');dCh('dc');
+  CH['dp']=new Chart($('ch-dec-path').getContext('2d'),{type:'line',data:{labels:pd.map(d=>ML(d.p)),datasets:[
+    {label:`${tY} strip avg by observation date`,data:pV,borderColor:col,borderWidth:2,pointRadius:0,fill:false,tension:0.2},
+    {label:'Optimal entry',data:pV.map((_,i)=>i===mxI?pV[i]:null),borderColor:'#22c55e',borderWidth:0,pointRadius:7,pointBackgroundColor:'#22c55e',showLine:false}
+  ]},options:{...bO,scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
+
+  $('dec-lb').innerHTML=`<table><thead><tr><th class="L">Look-Back</th><th>Strip Then</th><th>Current</th><th>Change</th></tr></thead><tbody>
+    ${[6,12,18,24].map(lb=>{
+      const ti=Math.max(0,pd.length-1-lb),v=pd[ti]?.v,d=v&&curV?+(curV-v).toFixed(2):null;
+      return`<tr><td class="L">${lb}mo ago (${ML(pd[ti]?.p)})</td>
+        <td style="color:${col}">${v?'$'+v.toFixed(2):'—'}</td>
+        <td>${curV?'$'+curV.toFixed(2):'—'}</td>
+        <td style="color:${d==null?'inherit':d>0?'#22c55e':'#ef4444'}">${d!=null?(d>0?'+':'')+d.toFixed(2)+' '+unit:'—'}</td></tr>`;
+    }).join('')}</tbody></table>`;
+
+  const cg=PERIODS.map(p=>{const s=c==='oil'?OIL[p]:GAS[p];if(!s||!s[1]||!s[12])return null;return{p,v:+(s[12]-s[1]).toFixed(2)};}).filter(Boolean);
+  CH['dc']=new Chart($('ch-dec-cg').getContext('2d'),{type:'bar',data:{labels:cg.map(d=>ML(d.p)),datasets:[{
+    label:'C12–C1',data:cg.map(d=>d.v),borderRadius:1,
+    backgroundColor:cg.map(d=>d.v>0?'#22c55e44':'#ef444444'),
+    borderColor:cg.map(d=>d.v>0?'#22c55e':'#ef4444'),borderWidth:1
+  }]},options:{...bO,plugins:{...bO.plugins,legend:{display:false},annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#64748b88',borderWidth:1}}}},
+    scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+v}}}}});
+
+  const cc=cg[cg.length-1]?.v;
+  $('dec-insight').innerHTML=`<strong>${tY} Strip Path:</strong>
+    Best historical hedge entry for ${tY}: <strong class="hi">${ML(pd[mxI]?.p)}</strong> at <strong>${'$'+mxV.toFixed(2)}</strong> ${unit}.
+    Current: <strong>${curV?'$'+curV.toFixed(2):'N/A'}</strong>.
+    Curve structure: <strong>${cc!=null?cc>0.5?'contango — extend tenor, lock deferred months':cc<-0.5?'backwardated — hedge front months':'near flat':'N/A'}</strong>
+    (C12−C1 = ${cc!=null?(cc>=0?'+':'')+cc.toFixed(2)+' '+unit:'N/A'}).`;
+}
+
+// ── ⑥ SCORECARD ──────────────────────────────────────────
+function renderScorecard(){
+  if(!PERIODS.length)return;
+  const lat=PERIODS[PERIODS.length-1];
+  const oA=stripAvg(lat,'oil'),gA=stripAvg(lat,'gas');
+  const aO=allAvgs('oil').map(d=>d.v),aG=allAvgs('gas').map(d=>d.v);
+  const oP=pctile(oA,aO),gP=pctile(gA,aG);
+  const rO=allAvgs('oil').filter(d=>d.p>='2018-01').map(d=>d.v);
+  const rG=allAvgs('gas').filter(d=>d.p>='2018-01').map(d=>d.v);
+  const oPR=pctile(oA,rO),gPR=pctile(gA,rG);
+
+  $('sc-stats').innerHTML=`
+    <div class="stat"><div class="sl">WTI 12-Mo</div><div class="sv" style="color:#f59e0b">${f$(oA,2)}<span style="font-size:12px">/bbl</span></div><div class="ss">${oP}th pct (2010+) · ${oPR}th (2018+)</div></div>
+    <div class="stat"><div class="sl">HH 12-Mo</div><div class="sv" style="color:#06b6d4">${f$(gA,2)}<span style="font-size:12px">/MMBtu</span></div><div class="ss">${gP}th pct (2010+) · ${gPR}th (2018+)</div></div>
+    <div class="stat"><div class="sl">Oil Signal</div><div class="sv" style="color:${oP>=60?'#22c55e':oP>=35?'#f59e0b':'#ef4444'};font-size:13px">${oP>=65?'ADD HEDGES':oP>=45?'LAYER IN':oP>=25?'CAUTION':'WAIT'}</div><div class="ss">${oP}th pct rank</div></div>
+    <div class="stat"><div class="sl">Gas Signal</div><div class="sv" style="color:${gP>=60?'#22c55e':gP>=35?'#f59e0b':'#ef4444'};font-size:13px">${gP>=65?'ADD HEDGES':gP>=45?'LAYER IN':gP>=25?'CAUTION':'WAIT'}</div><div class="ss">${gP}th pct rank</div></div>`;
+
+  const gates=(list)=>list.map(g=>`<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+    <div style="font-size:15px;min-width:22px">${g.p?'✅':'⚠️'}</div>
+    <div><div style="font-weight:600;font-size:11px;color:var(--text)">${g.l}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.6">${g.d}</div></div></div>`).join('');
+
+  const oQ=quartiles(aO),gQ=quartiles(aG);
+  const oS=OIL[lat],gS=GAS[lat];
+  const oCG=oS&&oS[1]&&oS[12]?+(oS[12]-oS[1]).toFixed(2):null;
+  const gCG=gS&&gS[1]&&gS[12]?+(gS[12]-gS[1]).toFixed(2):null;
+
+  $('sc-oil-g').innerHTML=gates([
+    {p:oP>=50,l:'Above 15-Year Median',d:`${f$(oA,2)}/bbl vs median ${f$(oQ?.p50,2)}. ${oP>=50?'✓ Supports fixed-price swaps.':'✗ Below median — use collars to retain upside.'}`},
+    {p:oP>=40,l:'Above 40th Pct (Layering Zone)',d:`${oP}th percentile. ${oP>=40?'Above threshold — add hedges in tranches.':'Patience warranted — build structure but not max coverage.'}`},
+    {p:oPR>=50,l:'Above Median — Post-2018 Cycle',d:`${oPR}th pct of 2018+ (removes COVID distortion).`},
+    {p:true,l:'Curve Shape',d:oCG!=null?`C12−C1 = ${oCG>=0?'+':''}${oCG}/bbl. ${oCG>0.5?'Contango — lock deferred, extend tenor.':oCG<-0.5?'Backwardated — hedge front months, avoid roll cost.':'Near flat.'}`:'C12 data unavailable.'}
+  ]);
+  $('sc-gas-g').innerHTML=gates([
+    {p:gP>=50,l:'Above 15-Year Median',d:`${f$(gA,2)}/MMBtu vs median ${f$(gQ?.p50,2)}. ${gP>=50?'✓ Supports gas swap additions.':'✗ Below median — floors preferred.'}`},
+    {p:gP>=40,l:'Above 40th Pct (Layering Zone)',d:`${gP}th percentile. ${gP>=40?'Above threshold — layer in hedges.':'Monitor for Q4 winter premium before adding.'}`},
+    {p:gPR>=50,l:'Above Median — Post-2021 Cycle',d:`${gPR}th pct of 2018+. Gas cycle reset post-COVID, post-Freeport.`},
+    {p:true,l:'Seasonal Window',d:(()=>{const m=new Date().getMonth();return[0,1,2].includes(m)?'Winter — premium typical, spring may be better entry.':[3,4,5].includes(m)?'Spring shoulder — historically best gas hedge window. Act before summer storage injection cheapens strip.':'Summer/Fall — evaluate Q4 winter premium; lock before seasonal demand.';})()}
+  ]);
+
+  $('sc-action').innerHTML=`<strong style="font-size:13px">📋 Peak 10 Hedge Action — ${ML(lat)}</strong><br/><br/>
+    <strong style="color:${oP>=55?'#22c55e':'#f59e0b'}">WTI Oil (${oP}th pct):</strong>
+    ${oP>=65?`${f$(oA,2)}/bbl — <span class="hi">top third historically. Strong support for adding GRC/BP swaps or floors at current levels</span>. Target 12–18 months of PDP.`:oP>=45?`Near median. <span class="am">Layer in tranches</span> — do not hedge full position at once. Use collars to preserve upside.`:`Below median. <span class="lo">Prefer collars over fixed swaps</span>. Retain upside in case strip recovers.`}
+    <br/><br/>
+    <strong style="color:${gP>=55?'#22c55e':'#f59e0b'}">Henry Hub Gas (${gP}th pct):</strong>
+    ${gP>=65?`${f$(gA,2)}/MMBtu — <span class="hi">historically elevated. Capture forward prices before seasonal premium fades</span>.`:gP>=45?`Near median. <span class="am">Selective hedging</span> — focus on winter delivery months where seasonal uplift is clearest.`:`Below median. <span class="lo">Gas less compelling now</span> — floors preferred, monitor spring shoulder for better entry.`}
+    <br/><br/>
+    <strong>Combined signal:</strong> Blended percentile = <strong>${Math.round((oP+gP)/2)}th</strong>.
+    ${Math.round((oP+gP)/2)>=55?'<span class="hi">History supports active hedging at current levels.</span>':'<span class="am">History favors structure-based hedging (collars, floors) over fixed swaps at current levels.</span>'}`;
+
+  const benches=[
+    {l:'2014 Peak (Pre-Crash)',p:'2014-06'},{l:'2016 Trough (Glut)',p:'2016-02'},
+    {l:'2018 Cycle High',p:'2018-10'},{l:'COVID Crash',p:'2020-04'},
+    {l:'Post-COVID Bounce',p:'2021-06'},{l:'Ukraine Spike',p:'2022-06'},
+    {l:'2023 Mid-Year',p:'2023-06'},{l:'2024 Mid-Year',p:'2024-06'},
+    {l:`Current (${ML(lat)})`,p:lat}
+  ];
+  $('sc-bench').innerHTML=benches.map(b=>{
+    const o=stripAvg(b.p,'oil'),g=stripAvg(b.p,'gas');
+    const od=o&&oA?+(o-oA).toFixed(2):null,gd=g&&gA?+(g-gA).toFixed(2):null;
+    const cur=b.p===lat;
+    return`<tr style="${cur?'border-top:2px solid var(--border2);font-weight:700':''}">
+      <td class="L" style="${cur?'color:var(--text)':''}">${b.l}</td>
+      <td style="color:#f59e0b">${o?'$'+o.toFixed(2):'—'}</td>
+      <td style="color:#06b6d4">${g?'$'+g.toFixed(2):'—'}</td>
+      <td style="color:${od==null?'inherit':od>0?'#22c55e':'#ef4444'}">${od!=null?(od>0?'+':'')+od.toFixed(2)+'/bbl':'—'}</td>
+      <td style="color:${gd==null?'inherit':gd>0?'#22c55e':'#ef4444'}">${gd!=null?(gd>0?'+':'')+gd.toFixed(2)+'/MMBtu':'—'}</td></tr>`;
+  }).join('');
+}
+
+// ─── TAB SWITCH ──────────────────────────────────────────────
+function switchTab(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  $('tab-'+id).classList.add('active');
+  const m={overview:0,timemachine:1,percentile:2,seasonality:3,decay:4,scorecard:5};
+  document.querySelectorAll('.tab')[m[id]].classList.add('active');
+}
+
+// ─── BOOT ────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
