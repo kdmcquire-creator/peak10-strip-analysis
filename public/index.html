@@ -290,7 +290,7 @@ td.L{text-align:left;color:var(--sub)}
     <div class="g2">
       <div class="card sp2">
         <div class="ct">COMPOSITE HEDGE SIGNAL — FULL HISTORY WITH REALIZED-VS-STRIP LINES</div>
-        <div class="cs"><strong>Custom signal formula (0–100, Peak 10 internal):</strong> Strip pct rank ×30 + Regime (HC/HB/LC/LB) ×20 + 3-mo momentum ×15 + OVX implied vol ×20 (or strip vol ×15 if OVX unavailable) + COT prod. net short ×15. Higher = stronger case for hedging now. <strong>Colored lines (right axis, inverted):</strong> Formula: <em>(avg_weekly_C1_in_delivery_month − Cn_strip_at_T0) / Cn_strip_at_T0 × 100</em>. Denominator = the exact Cn locked in at T0 (e.g. the C6 price on 1/15/2023 for the 6-mo line). Numerator = avg of up to 5 weekly front-month C1 closes during delivery month (Aegis supplement) or single EIA monthly value. Inverted axis: line going down = hedge was profitable. High signal score + downward lines = methodology validation.</div>
+        <div class="cs"><strong>Custom signal formula (0–100, Peak 10 internal):</strong> Strip pct rank ×30 + Regime (HC/HB/LC/LB) ×20 + 3-mo momentum ×15 + OVX implied vol ×20 (or strip vol ×15 if OVX unavailable) + COT prod. net short ×15. Higher = stronger case for hedging now. <strong>Colored lines (right axis, inverted):</strong> Formula: <em>(Cn_at_T0 − realized_C1) / realized_C1 × 100</em>. Denominator = realized spot (symmetric: ±$20 from same price = same %). Positive = hedge captured premium over market (good). Negative = market came in above locked-in price (bad). Inverted axis: positive (good hedge) plots downward. High signal + line going down = methodology validation.</div>
         <div style="position:relative"><canvas id="ch-rg-signal" height="200"></canvas></div>
       </div>
       <div class="card">
@@ -596,8 +596,9 @@ function loadSupplement(inp){
       const hhWkly=Object.keys(WEEKLY_C1_GAS).length;
       const avgWkly=wtiWkly>0?+(Object.values(WEEKLY_C1_OIL).reduce((s,a)=>s+a.length,0)/wtiWkly).toFixed(1):0;
       console.log(`Weekly C1 store: WTI ${wtiWkly} months (avg ${avgWkly} obs/mo), HH ${hhWkly} months`);
+      // Include EIA months AND Aegis-only months beyond EIA cutoff
       PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
-        .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
+        .filter(p=>{const o=OIL[p];return o&&o[1]&&(o[3]||o[2]);}).sort();
       SUPP_LOADED=true;
       inp.value='';
       pill.className='pill pill-ok';
@@ -683,8 +684,10 @@ async function loadData(){
   await fetchBatch(gIds,GAS,'NG.RNGC','.M');
 
   ldr('Processing...',90);
+  // Require at least C1 + C3 (EIA always has both; Aegis-only months have C1-C24)
+  // Aegis months after EIA cutoff are fully valid and included here
   PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
-    .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
+    .filter(p=>{const o=OIL[p];return o&&o[1]&&(o[3]||o[2]);}).sort();
 
   if(PERIODS.length<12){
     showErr(
@@ -721,6 +724,11 @@ function retryLoad(){
 function renderAll(){
   renderOverview();renderTimeMachine();renderPercentile();
   renderSeasonality();renderDecay();renderScorecard();
+  // Tabs 7 & 8: lazy on first load, but must refresh when supplement extends PERIODS
+  if(SUPP_LOADED){
+    if(typeof renderRealization==='function') renderRealization();
+    if(typeof renderRegime==='function') renderRegime();
+  }
 }
 
 // ─── STRIP MATH ────────────────────────────────────────────
@@ -1392,18 +1400,31 @@ function computeSignal(p,c,allVals,allAvgsSorted){
   const regScore=highStrip&&contango?20:highStrip&&!contango?15:!highStrip&&!contango?10:6;
   const pidx=PERIODS.indexOf(p);
   let momScore=8;
-  if(pidx>=3){const prev=stripAvg(PERIODS[pidx-3],c);if(prev){const drift=(avg-prev)/prev;momScore=drift<-0.05?15:drift<0?12:drift<0.05?8:drift<0.1?4:1;}}
+  // Momentum: rising strip = more urgency to lock in price now
+  // drift = (current avg strip − 3-months-ago avg strip) / prior avg strip
+  if(pidx>=3){const prev=stripAvg(PERIODS[pidx-3],c);if(prev){
+    const drift=(avg-prev)/prev;
+    // >+10%: strip surging   → strong case to hedge before mean reversion (15)
+    // +5–10%: rising solidly → good case (12)
+    // 0–+5%:  rising slowly  → mild case (8)
+    // -5–0%:  drifting down  → wait for better entry (4)
+    // <-5%:   falling hard   → do not lock in declining price (1)
+    momScore=drift>0.1?15:drift>0.05?12:drift>0?8:drift>-0.05?4:1;
+  }}
   // OVX component (if available for this month)
   const allOVXVals=Object.values(OVX_MONTHLY).filter(v=>v>0);
   const ovxVal=OVX_MONTHLY[p]||null;
-  const ovxScore=ovxVal&&allOVXVals.length?(1-pctile(ovxVal,allOVXVals)/100)*20:0;
+  // OVX: high implied vol → tail risk is priced in → more valuable to hedge now
+  // Low OVX = calm market, cheap hedges but less urgency; High OVX = market fearful
+  const ovxScore=ovxVal&&allOVXVals.length?(pctile(ovxVal,allOVXVals)/100)*20:0;
   // Vol proxy (strip-based)
   const volVals=[];
   for(let i=Math.max(1,pidx-5);i<=pidx;i++){const cur=stripAvg(PERIODS[i],c),prv=stripAvg(PERIODS[i-1],c);if(cur&&prv)volVals.push(Math.abs(cur-prv)/prv*100);}
   const curVol=volVals.length?volVals.reduce((a,b)=>a+b)/volVals.length:5;
   const allVols=[];for(let i=1;i<PERIODS.length;i++){const cur=stripAvg(PERIODS[i],c),prv=stripAvg(PERIODS[i-1],c);if(cur&&prv)allVols.push(Math.abs(cur-prv)/prv*100);}
   const volPct=allVols.length?pctile(curVol,allVols)/100:0.5;
-  const volScore=(1-volPct)*(ovxVal?5:15);
+  // Vol proxy: high realized vol → elevated risk environment → more urgent to hedge
+  const volScore=(volPct)*(ovxVal?5:15);
   // COT component (nearest weekly report to this month)
   let cotScore=0;
   if(COT_WTI.length){
@@ -1504,24 +1525,11 @@ function renderRegime(){
   </div>`;
 
   // ── Chart 1: Signal history + 4 realized-vs-strip tenor lines ───────────
-  // Exact formula per user definition:
-  //   pct = (realized_C1_at_T0+N  −  Cn_strip_at_T0) / Cn_strip_at_T0 × 100
-  //
-  // Terms:
-  //   T0           = hedge execution month (x-axis point)
-  //   N            = tenor in months (3, 6, 9, or 12)
-  //   Cn_strip_at_T0  = OIL/GAS[T0][N] — the actual Nth contract price
-  //                     locked in at T0 (e.g. for 6-mo tenor: the C6 price on T0)
-  //   realized_C1_at_T0+N = avg of all available weekly C1 spot closes
-  //                         during delivery month T0+N (4–5 values from Aegis
-  //                         supplement if loaded; falls back to single EIA monthly)
-  //
-  // Interpretation:
-  //   Negative → realized < locked-in price → hedge was profitable
-  //   Positive → realized > locked-in price → unhedged position outperformed
-  //
-  // Validation: if high signal scores correlate with negative values,
-  // the composite methodology has discriminatory power.
+  // Exact formula: (Cn_at_T0 − realized_C1_at_T0+N) / realized_C1_at_T0+N × 100
+  // Denominator = realized spot (objective market reference, symmetric ±$20 = ±same%)
+  // Positive = good hedge (locked in above what market cleared — producer benefited)
+  // Negative = bad hedge (locked in below market — producer left money on table)
+  // Axis is inverted: positive values plot downward → "hedge paid off" = line goes down
   const store2=c==='oil'?OIL:GAS;
   const tenorLines=[3,6,9,12];
   const tenorColors=['#22c55e','#06b6d4','#f59e0b','#a78bfa'];
@@ -1539,7 +1547,10 @@ function renderRegime(){
       // Realized = avg weekly C1 spot during delivery month (4-5 obs if Aegis loaded)
       const realized=getRealizedC1(deliveryPeriod, c);
       if(!realized||realized<=0) return;
-      rvs[tn].push({p, pct:+((realized-lockedIn)/lockedIn*100).toFixed(2)});
+      // (lockedIn − realized) / realized × 100
+      // Positive = good hedge (locked in above market). Negative = bad hedge.
+      // Symmetric: ±$20 from same realized price = same ± percentage.
+      rvs[tn].push({p, pct:+((lockedIn-realized)/realized*100).toFixed(2)});
     });
   });
   const signalHistory=PERIODS.map(p=>({p,v:computeSignal(p,c,allVals,[])})).filter(d=>d.v!=null);
@@ -1558,7 +1569,7 @@ function renderRegime(){
     labels:sigLabels,
     datasets:[
       {label:'Hedge Signal (0–100)',data:signalHistory.map(d=>d.v),
-        borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#6366f118',tension:0.3,yAxisID:'y'},
+        borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#6366f118',tension:0.3,yAxisID:'y',spanGaps:true},
       {label:'Today',data:signalHistory.map(d=>d.p===lat?d.v:null),
         pointRadius:6,pointBackgroundColor:signalColor,borderColor:signalColor,borderWidth:0,showLine:false,yAxisID:'y'},
       ...rvsDatasets
@@ -1570,14 +1581,25 @@ function renderRegime(){
         annotation:{annotations:{
           h70:{type:'line',yMin:70,yMax:70,borderColor:'#22c55e44',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
           h40:{type:'line',yMin:40,yMax:40,borderColor:'#ef444444',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
-          z0:{type:'line',yMin:0,yMax:0,borderColor:'#47556944',borderWidth:1,borderDash:[2,4],yScaleID:'y2'}}}},
+          z0:{type:'line',yMin:0,yMax:0,borderColor:'#47556944',borderWidth:1,borderDash:[2,4],yScaleID:'y2'},
+          // Shade the trailing 12-month zone where RvS outcomes aren't yet known
+          // The 12-mo line lags by 12mo, 9-mo by 9mo, etc.
+          // Shade from the 3-mo cutoff to present to show what's "in progress"
+          pendingBox:{type:'box',
+            xMin:sigLabels[Math.max(0,sigLabels.length-12)],
+            xMax:sigLabels[sigLabels.length-1],
+            backgroundColor:'#6366f108',borderColor:'#6366f122',borderWidth:1,
+            yScaleID:'y',
+            label:{content:['◀ OUTCOMES PENDING','(12-mo line lags 12mo','3-mo line lags 3mo)'],
+              display:true,position:'center',color:'#6366f166',
+              font:{size:8,family:'IBM Plex Mono'},backgroundColor:'transparent'}}}}},
       scales:{
         ...bO.scales,
         y:{...bO.scales.y,min:0,max:100,position:'left',
           title:{display:true,text:'Hedge Signal',color:'#6366f1',font:{size:9}},
           ticks:{...bO.scales.y.ticks,callback:v=>v+'/100'}},
         y2:{type:'linear',position:'right',reverse:true,
-          title:{display:true,text:'(Realized−Strip)/Strip% — inverted: down=hedge paid off',color:'#94a3b8',font:{size:9}},
+          title:{display:true,text:'(Cn_locked − Realized) / Realized % — inverted: up=good hedge',color:'#94a3b8',font:{size:9}},
           ticks:{color:'#64748b',font:{size:8,family:'IBM Plex Mono'},callback:v=>(v>0?'+':'')+v.toFixed(0)+'%'},
           grid:{drawOnChartArea:false},
           border:{color:'#1e3050'}}}}});
