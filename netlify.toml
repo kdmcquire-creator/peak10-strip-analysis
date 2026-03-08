@@ -1,5 +1,4 @@
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:; connect-src *"
+[[redirects]]
+  from = "/"
+  to = "/Index_Strip_Analysis.html"
+  status = 200
