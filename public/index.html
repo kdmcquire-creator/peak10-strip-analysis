@@ -614,7 +614,12 @@ function loadCOTFile(inp){
 }
 
 // Netlify HTTPS origin — direct EIA API calls work without any proxy
-const PROXY=[u=>u];
+// EIA proxy chain: direct first, then CORS relays if direct is blocked
+const PROXY=[
+  u=>u,
+  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
 let PX=0;
 
 let OIL={},GAS={},PERIODS=[];
@@ -765,7 +770,8 @@ function loadSupplement(inp){
       btn.style.color='var(--green)';
       btn.textContent=`✓ C1–C${cMax} Loaded`;
       $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${latest}`;
-      if(typeof renderAll==='function') renderAll();
+      clearTimeout(loadTimeout);
+  if(typeof renderAll==='function') renderAll();
     }catch(err){
       console.error('Supplement parse error:',err);
       pill.className='pill pill-err';
@@ -789,30 +795,36 @@ function ldr(msg,pct,det,ser){
 
 function dCh(id){if(CH[id]){CH[id].destroy();delete CH[id];}}
 
-// ─── FETCH WITH PROXY FALLBACK ──────────────────────────────
+// ─── FETCH WITH TIMEOUT + PROXY FALLBACK ────────────────────
 async function fetchSeries(sid){
-  // Use v2/seriesid/ — simplest URL, no [] chars needed
   const base=`https://api.eia.gov/v2/seriesid/${sid}?api_key=${KEY}&length=5000&start=2010-01`;
   let last='';
   for(let pi=PX;pi<PROXY.length;pi++){
     const url=PROXY[pi](base);
     try{
-      const r=await fetch(url);
+      // 15s timeout per attempt — prevents indefinite hang on slow EIA responses
+      const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
       if(!r.ok){last=`HTTP ${r.status}`;continue;}
       const j=await r.json();
-      // v2/seriesid returns {response:{data:[{period,value,...}]}} or legacy {series:[{data:[...]}]}
       let rows=j?.response?.data||j?.series?.[0]?.data||[];
       if(rows.length>0){PX=pi;return rows;}
       last='empty';
     }catch(e){last=e.message||String(e);}
   }
-  console.warn('Failed',sid,last);
+  console.warn('EIA series failed:',sid,last);
   return [];
 }
 
 // ─── LOAD ALL 24 SERIES ─────────────────────────────────────
 async function loadData(){
   ldr('Connecting to EIA API...',5);
+  // Safety net: if the entire load hasn't completed in 90s, surface an error
+  const loadTimeout=setTimeout(()=>{
+    if(document.getElementById('loader')?.style.display!=='none'){
+      showErr('EIA API load timed out after 90 seconds.',
+        'The EIA API may be experiencing delays. Click Retry — it usually resolves on the second attempt.<br>If it persists, the API may be temporarily down.');
+    }
+  },90000);
   const oIds=Array.from({length:12},(_,i)=>`PET.RCLC${i+1}.M`);
   const gIds=Array.from({length:12},(_,i)=>`NG.RNGC${i+1}.M`);
   let done=0;const tot=24;
