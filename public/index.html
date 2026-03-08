@@ -17,8 +17,8 @@
   --text:#e2e8f0;--muted:#64748b;--sub:#94a3b8;
   --mono:'IBM Plex Mono',monospace;
 }
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
-.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+html{scroll-behavior:smooth}html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
 .brand-name{font-size:15px;font-weight:700;color:#f1f5f9}
 .brand-sub{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:1px}
 .badge{background:var(--border);border:1px solid var(--border2);border-radius:4px;padding:3px 8px;font-size:10px;color:var(--sub);font-weight:600}
@@ -27,8 +27,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--m
 .pill-loading{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}
 .pill-ok{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
 .pill-err{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
-.main{padding:18px 24px;max-width:1600px;margin:0 auto}
-.tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;flex-wrap:wrap;margin-bottom:16px}
+.main{padding:12px 24px 18px;max-width:1600px;margin:0 auto}
+.tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;flex-wrap:wrap;margin-bottom:0;position:sticky;top:55px;z-index:49;margin-bottom:0}
 .tab{padding:7px 14px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:var(--mono);transition:all .15s;white-space:nowrap}
 .tab:hover{color:var(--sub);background:var(--bg3)}
 .tab.active{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
@@ -48,7 +48,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--m
 .insight.gas{border-left-color:var(--gas)}
 .insight strong{color:var(--text)}
 .hi{color:#22c55e;font-weight:700}.lo{color:#ef4444;font-weight:700}.am{color:#f59e0b;font-weight:700}
-.ctrl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.ctrl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-top:10px}
 .cg{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:3px}
 .cb{padding:5px 12px;border:none;background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:var(--mono)}
 .cb.oil{background:var(--oil);color:#000}.cb.gas{background:var(--gas);color:#000}.cb.on{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
@@ -110,7 +110,8 @@ td.L{text-align:left;color:var(--sub)}
 </div>
 
 <div class="main" id="main-content" style="display:none">
-  <div class="tabs">
+  <div style="position:sticky;top:55px;z-index:49;background:var(--bg);padding:10px 0 8px;margin-bottom:0">
+  <div class="tabs" style="position:relative;top:0;margin-bottom:0">
     <button class="tab active" onclick="switchTab('overview')">① Overview</button>
     <button class="tab" onclick="switchTab('timemachine')">② Time Machine</button>
     <button class="tab" onclick="switchTab('percentile')">③ Percentile</button>
@@ -119,6 +120,7 @@ td.L{text-align:left;color:var(--sub)}
     <button class="tab" onclick="switchTab('scorecard')">⑥ Scorecard</button>
     <button class="tab" onclick="switchTab('realization')">⑦ Realization</button>
     <button class="tab" onclick="switchTab('regime')">⑧ Regime Signal</button>
+  </div>
   </div>
 
   <div id="tab-overview" class="panel active">
@@ -226,7 +228,7 @@ td.L{text-align:left;color:var(--sub)}
   </div>
   <!-- ═══ TAB 7: STRIP REALIZATION BACKTEST ═══════════════════════════════ -->
   <div id="tab-realization" class="panel">
-    <div class="ctrl-row">
+    <div class="ctrl-row" style="position:sticky;top:108px;z-index:48;background:var(--bg);padding:10px 0 8px;margin-bottom:6px">
       <div class="cg"><button class="cb oil" id="rlz-oil" onclick="setRlzC('oil')">WTI Oil</button><button class="cb" id="rlz-gas" onclick="setRlzC('gas')">Henry Hub</button></div>
       <div class="cg">
         <button class="cb on" id="rlz-all" onclick="setRlzEra('all')">All (2010+)</button>
@@ -276,7 +278,7 @@ td.L{text-align:left;color:var(--sub)}
 
   <!-- ═══ TAB 8: REGIME CLASSIFIER + HEDGE SIGNAL ═════════════════════════ -->
   <div id="tab-regime" class="panel">
-    <div class="ctrl-row">
+    <div class="ctrl-row" style="position:sticky;top:108px;z-index:48;background:var(--bg);padding:10px 0 8px;margin-bottom:6px">
       <div class="cg"><button class="cb oil" id="rg-oil" onclick="setRgC('oil')">WTI Oil</button><button class="cb" id="rg-gas" onclick="setRgC('gas')">Henry Hub</button></div>
       <div class="cg">
         <button class="cb on" id="rg-6" onclick="setRgFwd(6)">6-Mo Forward</button>
@@ -288,7 +290,7 @@ td.L{text-align:left;color:var(--sub)}
     <div class="g2">
       <div class="card sp2">
         <div class="ct">COMPOSITE HEDGE SIGNAL — FULL HISTORY WITH REALIZED-VS-STRIP LINES</div>
-        <div class="cs"><strong>Signal formula (0–100):</strong> Strip pct rank ×30 + Regime ×20 + 3-mo momentum ×15 + OVX implied vol ×20 (or strip vol ×15 if OVX unavailable) + COT prod. net short ×15. <strong>Colored lines (right axis):</strong> (avg realized − N-mo strip) / strip ×100 for 3, 6, 9, 12 month tenors. A positive value means realized came in above the hedged price (leaving money on table). Negative = hedge was valuable at that tenor.</div>
+        <div class="cs"><strong>Custom signal formula (0–100, Peak 10 internal):</strong> Strip pct rank ×30 + Regime (HC/HB/LC/LB) ×20 + 3-mo momentum ×15 + OVX implied vol ×20 (or strip vol ×15 if OVX unavailable) + COT prod. net short ×15. Higher = stronger case for hedging now. <strong>Colored lines (right axis, inverted):</strong> Formula: <em>(avg_weekly_C1_in_delivery_month − Cn_strip_at_T0) / Cn_strip_at_T0 × 100</em>. Denominator = the exact Cn locked in at T0 (e.g. the C6 price on 1/15/2023 for the 6-mo line). Numerator = avg of up to 5 weekly front-month C1 closes during delivery month (Aegis supplement) or single EIA monthly value. Inverted axis: line going down = hedge was profitable. High signal score + downward lines = methodology validation.</div>
         <div style="position:relative"><canvas id="ch-rg-signal" height="200"></canvas></div>
       </div>
       <div class="card">
@@ -304,7 +306,7 @@ td.L{text-align:left;color:var(--sub)}
     </div>
     <div class="g2">
       <div class="card">
-        <div class="ct">OVX — IMPLIED VOLATILITY (TRUE COST OF PROTECTION) <span id="ovx-badge" class="badge" style="margin-left:6px;vertical-align:middle">Loading…</span></div>
+        <div class="ct">OVX — IMPLIED VOLATILITY (TRUE COST OF PROTECTION) <span id="ovx-badge" class="badge" style="margin-left:6px;vertical-align:middle;background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">⬆ Upload CSV to enable</span></div>
         <div class="cs">CBOE Crude Oil Volatility Index — the market's 30-day implied vol for WTI options. Low OVX = cheap hedges. High OVX = expensive. Red dashed = current level. Monthly average shown.</div>
         <div style="position:relative"><canvas id="ch-rg-ovx" height="175"></canvas></div>
       </div>
@@ -316,7 +318,7 @@ td.L{text-align:left;color:var(--sub)}
     </div>
     <div class="g2">
       <div class="card sp2">
-        <div class="ct">COT — PRODUCER NET SHORT RATIO (WTI) <span id="cot-badge" class="badge" style="margin-left:6px;vertical-align:middle">Loading…</span></div>
+        <div class="ct">COT — PRODUCER NET SHORT RATIO (WTI) <span id="cot-badge" class="badge" style="margin-left:6px;vertical-align:middle;background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">⏳ Fetching CFTC data…</span></div>
         <div class="cs">CFTC Disaggregated COT: (Producer/Merchant Short − Long) ÷ Open Interest. Higher = producers are more hedged. When this is near historical highs, your peers have already moved — useful confirmation or contrarian context. Green band = current week.</div>
         <div style="position:relative"><canvas id="ch-rg-cot" height="155"></canvas></div>
       </div>
@@ -461,6 +463,22 @@ let PX=0;
 let OIL={},GAS={},PERIODS=[];
 let CH={};
 let SUPP_LOADED=false; // tracks whether Aegis supplement has been merged
+// Weekly C1 spot values per delivery month — populated by Aegis supplement loader.
+// WEEKLY_C1_OIL["YYYY-MM"] = [v1, v2, v3, v4, v5]  (up to 5 weekly C1 closes during that month)
+// WEEKLY_C1_GAS["YYYY-MM"] = [...]
+// Used to compute avg realized C1 for RvS lines: normalizes single-week noise.
+// Falls back to OIL/GAS[period][1] for EIA-only months (monthly, single value).
+let WEEKLY_C1_OIL={}, WEEKLY_C1_GAS={};
+// Helper: get best available realized C1 for a delivery month
+// Returns avg of weekly C1 values if ≥2 available, else single monthly value
+function getRealizedC1(period, c){
+  const wkly = c==='oil' ? WEEKLY_C1_OIL[period] : WEEKLY_C1_GAS[period];
+  if(wkly && wkly.length>=2){
+    return +(wkly.reduce((a,b)=>a+b)/wkly.length).toFixed(4);
+  }
+  const store = c==='oil' ? OIL : GAS;
+  return store[period]?.[1] || null;
+}
 
 const $=id=>document.getElementById(id);
 
@@ -532,12 +550,52 @@ function loadSupplement(inp){
       Object.entries(wtiData).forEach(([p,contracts])=>{
         const isNew=!OIL[p]||!OIL[p][1];
         if(isNew) mergedNew++; else mergedOverlap++;
-        // Merge: Aegis C1–C24 into existing; EIA's C1–C12 still preserved where Aegis is null
         OIL[p]={...(OIL[p]||{}),...contracts};
       });
       Object.entries(hhData).forEach(([p,contracts])=>{
         GAS[p]={...(GAS[p]||{}),...contracts};
       });
+      // ── Populate WEEKLY_C1 stores ─────────────────────────────────────────
+      // For each as-of week, the C1 value is the front-month price for that
+      // calendar month. We bucket it by the as-of month so that when we
+      // look up "what was the realized spot during delivery month YYYY-MM",
+      // we have all weekly C1 observations from that month (4-5 values).
+      function collectWeeklyC1(ws, store){
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        if(rows.length<2) return;
+        // Detect max C from header (same as parseSheet)
+        const hdr=rows[0];
+        // Process each row: col 0 = as-of date, col 1 = C1 value
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r];
+          if(!row||!row[0]||!row[1]) continue;
+          let dt=row[0];
+          if(typeof dt==='string'){
+            const ymd=dt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            const mdy=dt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if(ymd) dt=new Date(+ymd[1],+ymd[2]-1,+ymd[3]);
+            else if(mdy) dt=new Date(+mdy[3],+mdy[1]-1,+mdy[2]);
+            else dt=new Date(dt);
+          }
+          if(!(dt instanceof Date)||isNaN(dt)) continue;
+          // C1 price is in column 1 (first contract after as-of date)
+          const v=parseFloat(row[1]);
+          if(isNaN(v)||v<=0) continue;
+          // As-of month = delivery month for C1
+          const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+          if(!store[period]) store[period]=[];
+          store[period].push(v);
+        }
+      }
+      WEEKLY_C1_OIL={};
+      WEEKLY_C1_GAS={};
+      collectWeeklyC1(wtiSheet, WEEKLY_C1_OIL);
+      collectWeeklyC1(hhSheet,  WEEKLY_C1_GAS);
+      // Log coverage
+      const wtiWkly=Object.keys(WEEKLY_C1_OIL).length;
+      const hhWkly=Object.keys(WEEKLY_C1_GAS).length;
+      const avgWkly=wtiWkly>0?+(Object.values(WEEKLY_C1_OIL).reduce((s,a)=>s+a.length,0)/wtiWkly).toFixed(1):0;
+      console.log(`Weekly C1 store: WTI ${wtiWkly} months (avg ${avgWkly} obs/mo), HH ${hhWkly} months`);
       PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
         .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
       SUPP_LOADED=true;
@@ -1142,7 +1200,7 @@ function getRlzErrors(c,fromYear,regFilter){
       const [yr,mo]=p.split('-').map(Number);
       const d=new Date(yr,mo-1+(n-1),1);
       const delP=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      const realized=store[delP]?.[1]; if(!realized||realized<=0) continue;
+      const realized=getRealizedC1(delP,c); if(!realized||realized<=0) continue;
       errors.push({p,n,predicted,realized,error:realized-predicted,pctErr:(realized-predicted)/predicted*100,regime});
     }
   });
@@ -1154,12 +1212,11 @@ function renderRealization(){
   const c=RLZ_C;
   const fromYear=RLZ_ERA==='all'?2010:RLZ_ERA==='2015'?2015:2020;
   const unit=c==='oil'?'/bbl':'/MMbtu';
-  const col=c==='oil'?'#f59e0b':'#06b6d4';
 
   ['ch-rlz-tenor','ch-rlz-scatter','ch-rlz-hist','ch-rlz-regime'].forEach(id=>dCh(id));
 
   const errs=getRlzErrors(c,fromYear,RLZ_REG);
-  if(!errs.length){$('rlz-insight').textContent='Not enough data for selected filters.';return;}
+  if(!errs.length){$('rlz-insight').textContent='Not enough data for selected filters.';$('rlz-stats').innerHTML='';return;}
 
   const n=errs.length;
   const meanErr=errs.reduce((s,e)=>s+e.error,0)/n;
@@ -1167,7 +1224,8 @@ function renderRealization(){
   const overEst=errs.filter(e=>e.error<0).length;
   const underEst=errs.filter(e=>e.error>0).length;
   const rmse=Math.sqrt(errs.reduce((s,e)=>s+e.error*e.error,0)/n);
-  const maxTenor=Math.max(...errs.map(e=>e.n));
+  const maxTenor=Math.max(...errs.map(e=>e.n),1);
+  const maxT=Math.min(24,maxTenor);
 
   $('rlz-stats').innerHTML=`
     <div class="stat"><div class="sl">Observations</div><div class="sv" style="font-size:16px">${n.toLocaleString()}</div><div class="ss">hedge-month/tenor pairs</div></div>
@@ -1175,99 +1233,123 @@ function renderRealization(){
     <div class="stat"><div class="sl">Mean Error %</div><div class="sv" style="color:${meanPct>0?'#22c55e':'#ef4444'}">${meanPct>0?'+':''}${meanPct.toFixed(1)}%</div><div class="ss">(realized−strip)/strip</div></div>
     <div class="stat"><div class="sl">Strip Overestimated</div><div class="sv" style="color:#ef4444">${(overEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
     <div class="stat"><div class="sl">Strip Underestimated</div><div class="sv" style="color:#22c55e">${(underEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
-    <div class="stat"><div class="sl">Max Tenor</div><div class="sv">C${maxTenor}</div><div class="ss">upload Aegis for C13–C24</div></div>`;
+    <div class="stat"><div class="sl">Max Tenor</div><div class="sv">C${maxT}</div><div class="ss">upload Aegis for C13–C24</div></div>`;
 
   const dir=meanErr<0?'overestimated realized prices':'underestimated realized prices';
   const action=meanErr<0
     ?`Strip was <strong style="color:#22c55e">pessimistic</strong> about future prices. Locking in the strip captured a real forward premium — hedging paid off on average.`
-    :`Strip was <strong style="color:#ef4444">optimistic</strong> about future prices. Realized prices came in higher — unhedged positions captured more value. This is the risk of waiting.`;
-  $('rlz-insight').innerHTML=`<strong>Key finding (${RLZ_ERA==='all'?'2010+':RLZ_ERA==='2015'?'2015+':'Post-COVID'} ${RLZ_REG!=='all'?'· '+RLZ_REG:''}):</strong> Strip historically ${dir} by avg <strong>${Math.abs(meanErr).toFixed(2)}${unit} (${Math.abs(meanPct).toFixed(1)}%)</strong> across C1–C${maxTenor}. ${action}`;
+    :`Strip was <strong style="color:#ef4444">optimistic</strong> about future prices. Realized prices came in higher — unhedged positions captured more value.`;
+  $('rlz-insight').innerHTML=`<strong>Key finding (${RLZ_ERA==='all'?'2010+':RLZ_ERA==='2015'?'2015+':'Post-COVID'} ${RLZ_REG!=='all'?'· '+RLZ_REG:''}):</strong> Strip historically ${dir} by avg <strong>${Math.abs(meanErr).toFixed(2)}${unit} (${Math.abs(meanPct).toFixed(1)}%)</strong> across C1–C${maxT}. ${action}`;
 
-  // Chart 1: avg error by tenor C1–C24 (show all available tenors)
-  const maxT=Math.min(24,maxTenor||12);
-  const byTenor=Array.from({length:maxT},(_,i)=>{
+  // ── Chart 1: avg error by tenor C1–maxT ──────────────────────────────────
+  // Highlight the selected tenor from the histogram dropdown
+  const histTenorSel=$('rlz-hist-tenor')?.value||'all';
+  const highlightN=histTenorSel==='all'?null:+histTenorSel;
+  const byTenorLabels=Array.from({length:maxT},(_,i)=>`C${i+1}`);
+  const byTenorData=Array.from({length:maxT},(_,i)=>{
     const te=errs.filter(e=>e.n===i+1);
     return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;
   });
+  // Brighten selected tenor bar
+  const tenorBgColors=byTenorData.map((v,i)=>{
+    if(v==null) return 'transparent';
+    const isHL=highlightN===null||highlightN===i+1;
+    const alpha=isHL?'bb':'33';
+    return v>=0?`#22c55e${alpha}`:`#ef4444${alpha}`;
+  });
+  const tenorBdColors=byTenorData.map((v,i)=>{
+    if(v==null) return 'transparent';
+    const isHL=highlightN===null||highlightN===i+1;
+    return v>=0?(isHL?'#22c55e':'#22c55e55'):(isHL?'#ef4444':'#ef444455');
+  });
   CH['ch-rlz-tenor']=new Chart($('ch-rlz-tenor'),{type:'bar',data:{
-    labels:Array.from({length:maxT},(_,i)=>`C${i+1}`),
-    datasets:[{label:'Avg (Realized − Predicted)',data:byTenor,
-      backgroundColor:byTenor.map(v=>v==null?'transparent':v>=0?'#22c55e88':'#ef444488'),
-      borderColor:byTenor.map(v=>v==null?'transparent':v>=0?'#22c55e':'#ef4444'),
-      borderWidth:1,borderRadius:3}]},
+    labels:byTenorLabels,
+    datasets:[{label:'Avg (Realized − Predicted)',data:byTenorData,
+      backgroundColor:tenorBgColors,borderColor:tenorBdColors,
+      borderWidth:byTenorData.map((_,i)=>highlightN===null||highlightN===i+1?1.5:1),
+      borderRadius:3}]},
     options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1}}}},
       scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>0?'+':'')+v.toFixed(2)+unit}}}}});
 
-  // Chart 2: scatter predicted vs realized — safe spread for empty sets
+  // ── Chart 2: scatter predicted vs realized ────────────────────────────────
   const sample=errs.length>800?errs.filter((_,i)=>i%Math.ceil(errs.length/800)===0):errs;
   const cangoPts=sample.filter(e=>e.regime==='contango').map(e=>({x:e.predicted,y:e.realized}));
   const backwPts=sample.filter(e=>e.regime==='backwardated').map(e=>({x:e.predicted,y:e.realized}));
-  // Build diagonal ref line safely (guard against empty errs)
   const allPred=errs.map(e=>e.predicted);
-  const diagPts=allPred.length>=2
-    ?[{x:Math.min(...allPred),y:Math.min(...allPred)},{x:Math.max(...allPred),y:Math.max(...allPred)}]
-    :[];
-  const scatterDatasets=[
+  const scDs=[
     {label:'Contango',data:cangoPts,backgroundColor:'#f59e0b55',pointRadius:2,pointHoverRadius:4},
     {label:'Backwardated',data:backwPts,backgroundColor:'#06b6d455',pointRadius:2,pointHoverRadius:4}
   ];
-  if(diagPts.length){
-    scatterDatasets.push({label:'Perfect prediction',data:diagPts,type:'line',
-      borderColor:'#47556999',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false});
+  if(allPred.length>=2){
+    const mn=Math.min(...allPred),mx=Math.max(...allPred);
+    scDs.push({label:'Perfect prediction',data:[{x:mn,y:mn},{x:mx,y:mx}],
+      type:'line',borderColor:'#47556999',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false});
   }
-  CH['ch-rlz-scatter']=new Chart($('ch-rlz-scatter'),{type:'scatter',data:{datasets:scatterDatasets},
+  CH['ch-rlz-scatter']=new Chart($('ch-rlz-scatter'),{type:'scatter',data:{datasets:scDs},
     options:{...bO,scales:{
       x:{...bO.scales.x,title:{display:true,text:'Predicted (strip at hedge date)',color:TC,font:{size:9}}},
       y:{...bO.scales.y,title:{display:true,text:'Realized (C1 at delivery)',color:TC,font:{size:9}},ticks:{...bO.scales.y.ticks,callback:v=>'$'+v.toFixed(0)}}}}});
 
-  // Chart 3: error histogram — filtered by selected tenor dropdown
-  const histTenorSel=$('rlz-hist-tenor')?.value||'all';
+  // ── Chart 3: fixed 3% bins −24..+24 + overflow ────────────────────────────
   const histErrs=histTenorSel==='all'?errs:errs.filter(e=>e.n===+histTenorSel);
   const histLabel=histTenorSel==='all'?`ALL TENORS (C1–C${maxT})`:`C${histTenorSel} ONLY`;
   if($('rlz-hist-label')) $('rlz-hist-label').textContent=histLabel;
-  if(histErrs.length>0){
-    const bins=24;
-    const pcts=histErrs.map(e=>e.pctErr);
-    const minP=Math.max(-150,Math.floor(Math.min(...pcts)/5)*5);
-    const maxPv=Math.min(150,Math.ceil(Math.max(...pcts)/5)*5);
-    const bSize=Math.max(1,(maxPv-minP)/bins);
-    const bLabels=Array.from({length:bins},(_,i)=>(minP+i*bSize).toFixed(0)+'%');
-    const bCounts=Array.from({length:bins},(_,i)=>{const lo=minP+i*bSize,hi=lo+bSize;return pcts.filter(v=>v>=lo&&v<hi).length;});
-    const obsLabel=histTenorSel==='all'?'# observations':'# observations';
-    CH['ch-rlz-hist']=new Chart($('ch-rlz-hist'),{type:'bar',data:{
-      labels:bLabels,
-      datasets:[{label:obsLabel,data:bCounts,
-        backgroundColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e55':'#ef444455'),
-        borderColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e':'#ef4444'),
-        borderWidth:1,borderRadius:2}]},
-      options:{...bO,plugins:{...bO.plugins,title:{display:true,
-        text:`${histErrs.length.toLocaleString()} observations · mean ${(histErrs.reduce((s,e)=>s+e.pctErr,0)/histErrs.length).toFixed(1)}%`,
-        color:'#94a3b8',font:{size:10,family:'IBM Plex Mono'}}},
-        scales:{...bO.scales,x:{...bO.scales.x,ticks:{...bO.scales.x.ticks,maxRotation:45,font:{size:8}}}}}});
-  } else {
-    $('ch-rlz-hist').getContext('2d').clearRect(0,0,999,999);
+  // Always render histogram — use full errs if tenor subset is empty
+  const srcErrs=histErrs.length>0?histErrs:errs;
+  // Fixed bins: <-24%, -24 to -21, ..., -3 to 0, 0 to 3, ..., 21 to 24, >24%
+  // 17 buckets total: 1 overflow-low + 16 interior (3% each from -24 to +24) + 1 overflow-high
+  const STEP=3, LBOUND=-24, HBOUND=24;
+  const nInterior=(HBOUND-LBOUND)/STEP; // 16
+  const bLabels=['<−24%'];
+  for(let b=LBOUND;b<HBOUND;b+=STEP){
+    bLabels.push(`${b>0?'+':''}${b} to ${b+STEP>0?'+':''}${b+STEP}%`);
   }
+  bLabels.push('>+24%');
+  const bCounts=new Array(bLabels.length).fill(0);
+  srcErrs.forEach(e=>{
+    const v=e.pctErr;
+    if(v<LBOUND){bCounts[0]++;return;}
+    if(v>=HBOUND){bCounts[bLabels.length-1]++;return;}
+    const idx=Math.floor((v-LBOUND)/STEP)+1;
+    bCounts[Math.min(idx,bLabels.length-2)]++;
+  });
+  const bColors=bLabels.map(l=>{
+    if(l.startsWith('>')) return '#22c55e55';
+    if(l.startsWith('<')) return '#ef444455';
+    const v=parseFloat(l);
+    return v>=0?'#22c55e55':'#ef444455';
+  });
+  const bBorderColors=bColors.map(c=>c.replace('55',''));
+  CH['ch-rlz-hist']=new Chart($('ch-rlz-hist'),{type:'bar',data:{
+    labels:bLabels,
+    datasets:[{label:'# observations',data:bCounts,
+      backgroundColor:bColors,borderColor:bBorderColors,
+      borderWidth:1,borderRadius:2}]},
+    options:{...bO,
+      plugins:{...bO.plugins,title:{display:true,
+        text:`${srcErrs.length.toLocaleString()} obs · mean ${(srcErrs.reduce((s,e)=>s+e.pctErr,0)/srcErrs.length).toFixed(1)}%${histErrs.length===0&&histTenorSel!=='all'?` (C${histTenorSel} has no data — showing all tenors)` : ''}`,
+        color:'#94a3b8',font:{size:10,family:'IBM Plex Mono'}}},
+      scales:{...bO.scales,x:{...bO.scales.x,ticks:{...bO.scales.x.ticks,maxRotation:55,font:{size:8}}}}}});
 
-  // Chart 4: avg error by regime × tenor groups C1–C6, C7–C12, C13–C18, C19–C24
+  // ── Chart 4: avg error by regime × all 4 tenor groups (always show all) ───
   const regimes=['contango','backwardated'];
   const tenorGroups=['C1–C6','C7–C12','C13–C18','C19–C24'];
   const tenorRanges=[[1,6],[7,12],[13,18],[19,24]];
-  // Only show groups that have data
-  const activeGroups=tenorGroups.map((g,i)=>{
-    const [lo,hi]=tenorRanges[i];
-    return errs.some(e=>e.n>=lo&&e.n<=hi);
-  });
-  const filteredGroups=tenorGroups.filter((_,i)=>activeGroups[i]);
-  const filteredRanges=tenorRanges.filter((_,i)=>activeGroups[i]);
   CH['ch-rlz-regime']=new Chart($('ch-rlz-regime'),{type:'bar',data:{
-    labels:filteredGroups,
+    labels:tenorGroups,
     datasets:regimes.map((reg,ri)=>({
       label:reg.charAt(0).toUpperCase()+reg.slice(1),
-      data:filteredRanges.map(([lo,hi])=>{const te=errs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;}),
+      data:tenorRanges.map(([lo,hi])=>{
+        const te=errs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);
+        return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;
+      }),
       backgroundColor:ri===0?'#f59e0b66':'#06b6d466',
       borderColor:ri===0?'#f59e0b':'#06b6d4',
-      borderWidth:1,borderRadius:3}))},
-    options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1}}}},
+      borderWidth:1,borderRadius:3,
+      skipNull:true}))},
+    options:{...bO,
+      plugins:{...bO.plugins,annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1}}},
+        title:{display:true,text:`Upload Aegis supplement to populate C13–C24 groups`,color:'#47556988',font:{size:9,family:'IBM Plex Mono'},display:maxT<13}},
       scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>0?'+':'')+v.toFixed(2)+unit}}}}});
 }
 
@@ -1422,10 +1504,24 @@ function renderRegime(){
   </div>`;
 
   // ── Chart 1: Signal history + 4 realized-vs-strip tenor lines ───────────
-  // For each hedge month P and tenor N, "realized-vs-strip" =
-  //   (avg C1 price in months P+1..P+N  −  strip_at_P) / strip_at_P × 100
-  // Positive = realized > hedged price (hedge left money on table)
-  // Negative = realized < hedged price (hedge was valuable)
+  // Exact formula per user definition:
+  //   pct = (realized_C1_at_T0+N  −  Cn_strip_at_T0) / Cn_strip_at_T0 × 100
+  //
+  // Terms:
+  //   T0           = hedge execution month (x-axis point)
+  //   N            = tenor in months (3, 6, 9, or 12)
+  //   Cn_strip_at_T0  = OIL/GAS[T0][N] — the actual Nth contract price
+  //                     locked in at T0 (e.g. for 6-mo tenor: the C6 price on T0)
+  //   realized_C1_at_T0+N = avg of all available weekly C1 spot closes
+  //                         during delivery month T0+N (4–5 values from Aegis
+  //                         supplement if loaded; falls back to single EIA monthly)
+  //
+  // Interpretation:
+  //   Negative → realized < locked-in price → hedge was profitable
+  //   Positive → realized > locked-in price → unhedged position outperformed
+  //
+  // Validation: if high signal scores correlate with negative values,
+  // the composite methodology has discriminatory power.
   const store2=c==='oil'?OIL:GAS;
   const tenorLines=[3,6,9,12];
   const tenorColors=['#22c55e','#06b6d4','#f59e0b','#a78bfa'];
@@ -1433,18 +1529,17 @@ function renderRegime(){
   tenorLines.forEach(tn=>{
     rvs[tn]=[];
     PERIODS.forEach(p=>{
-      const strip=stripAvg(p,c); if(!strip||strip<=0) return;
+      const s=store2[p]; if(!s) return;
+      // Cn at T0: the specific tenor contract price on hedge date
+      const lockedIn=s[tn]; if(!lockedIn||lockedIn<=0) return;
+      // Delivery month = T0 + N months
       const [yr,mo]=p.split('-').map(Number);
-      const realPrices=[];
-      for(let m=1;m<=tn;m++){
-        const dd=new Date(yr,mo-1+m,1);
-        const dp=`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}`;
-        const v=store2[dp]?.[1];
-        if(v&&v>0) realPrices.push(v);
-      }
-      if(realPrices.length<Math.max(1,Math.floor(tn*0.5))) return; // need at least half the months
-      const avgReal=realPrices.reduce((a,b)=>a+b)/realPrices.length;
-      rvs[tn].push({p, pct:+((avgReal-strip)/strip*100).toFixed(2)});
+      const dd=new Date(yr,mo-1+tn,1);
+      const deliveryPeriod=`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}`;
+      // Realized = avg weekly C1 spot during delivery month (4-5 obs if Aegis loaded)
+      const realized=getRealizedC1(deliveryPeriod, c);
+      if(!realized||realized<=0) return;
+      rvs[tn].push({p, pct:+((realized-lockedIn)/lockedIn*100).toFixed(2)});
     });
   });
   const signalHistory=PERIODS.map(p=>({p,v:computeSignal(p,c,allVals,[])})).filter(d=>d.v!=null);
@@ -1481,8 +1576,8 @@ function renderRegime(){
         y:{...bO.scales.y,min:0,max:100,position:'left',
           title:{display:true,text:'Hedge Signal',color:'#6366f1',font:{size:9}},
           ticks:{...bO.scales.y.ticks,callback:v=>v+'/100'}},
-        y2:{type:'linear',position:'right',
-          title:{display:true,text:'(Realized − Strip) / Strip %',color:'#94a3b8',font:{size:9}},
+        y2:{type:'linear',position:'right',reverse:true,
+          title:{display:true,text:'(Realized−Strip)/Strip% — inverted: down=hedge paid off',color:'#94a3b8',font:{size:9}},
           ticks:{color:'#64748b',font:{size:8,family:'IBM Plex Mono'},callback:v=>(v>0?'+':'')+v.toFixed(0)+'%'},
           grid:{drawOnChartArea:false},
           border:{color:'#1e3050'}}}}});
@@ -1610,31 +1705,53 @@ function renderRegime(){
         y:{...bO.scales.y,title:{display:true,text:'OVX (Impl. Vol)',color:TC,font:{size:9}},ticks:{...bO.scales.y.ticks,callback:v=>v.toFixed(0)}}}}});
   }
 
-  // ── Mean reversion chart ──────────────────────────────────────────────────
+  // ── Mean reversion chart — tied to Dist Tenor selector for fwd window ───
+  // Use the realization tab's "DIST TENOR" dropdown to set the forward window
+  // If tenor = "all" or not a valid number, default to RG_FWD (6 or 12)
+  const rlzTenorEl=$('rlz-hist-tenor');
+  const rlzTenorVal=rlzTenorEl?rlzTenorEl.value:'all';
+  const revertFwd=(rlzTenorVal!=='all'&&+rlzTenorVal>=1&&+rlzTenorVal<=24)?+rlzTenorVal:RG_FWD;
+  const revThreshold=revertFwd*0.25; // scale threshold with horizon
   const buckets=Array.from({length:10},(_,i)=>({range:`${i*10}–${(i+1)*10}th`,lower:0,higher:0,flat:0}));
   PERIODS.forEach(p=>{
     const avg=stripAvg(p,c); if(!avg) return;
     const bIdx=Math.min(9,Math.floor(pctile(avg,allVals)/10));
-    const fwdIdx=PERIODS.indexOf(p)+6;
+    const fwdIdx=PERIODS.indexOf(p)+revertFwd;
     if(fwdIdx>=PERIODS.length) return;
     const fwdAvg=stripAvg(PERIODS[fwdIdx],c); if(!fwdAvg) return;
     const chg=fwdAvg-avg;
-    if(chg<-0.25)buckets[bIdx].lower++;else if(chg>0.25)buckets[bIdx].higher++;else buckets[bIdx].flat++;
+    if(chg<-revThreshold)buckets[bIdx].lower++;
+    else if(chg>revThreshold)buckets[bIdx].higher++;
+    else buckets[bIdx].flat++;
   });
   const bTotals=buckets.map(b=>b.lower+b.higher+b.flat||1);
   const curBucket=Math.min(9,Math.floor(latPct/10));
+  // Compute stats for current bucket to annotate
+  const cBkt=buckets[curBucket];
+  const cBktTotal=bTotals[curBucket];
+  const cBktFellPct=+(cBkt.lower/cBktTotal*100).toFixed(0);
   CH['ch-rg-revert']=new Chart($('ch-rg-revert'),{type:'bar',data:{
     labels:buckets.map(b=>b.range),
     datasets:[
-      {label:'Strip fell 6mo later',data:buckets.map((b,i)=>+(b.lower/bTotals[i]*100).toFixed(0)),backgroundColor:'#22c55e66',borderColor:'#22c55e',borderWidth:1,borderRadius:2,stack:'s'},
-      {label:'Strip flat',data:buckets.map((b,i)=>+(b.flat/bTotals[i]*100).toFixed(0)),backgroundColor:'#47556966',borderColor:'#475569',borderWidth:1,borderRadius:2,stack:'s'},
-      {label:'Strip rose 6mo later',data:buckets.map((b,i)=>+(b.higher/bTotals[i]*100).toFixed(0)),backgroundColor:'#ef444466',borderColor:'#ef4444',borderWidth:1,borderRadius:2,stack:'s'},
+      {label:`Strip fell ${revertFwd}mo later`,data:buckets.map((b,i)=>+(b.lower/bTotals[i]*100).toFixed(0)),backgroundColor:buckets.map((_,i)=>i===curBucket?'#22c55ecc':'#22c55e44'),borderColor:'#22c55e',borderWidth:1,borderRadius:2,stack:'s'},
+      {label:'Strip flat',data:buckets.map((b,i)=>+(b.flat/bTotals[i]*100).toFixed(0)),backgroundColor:buckets.map((_,i)=>i===curBucket?'#47556999':'#47556933'),borderColor:'#475569',borderWidth:1,borderRadius:2,stack:'s'},
+      {label:`Strip rose ${revertFwd}mo later`,data:buckets.map((b,i)=>+(b.higher/bTotals[i]*100).toFixed(0)),backgroundColor:buckets.map((_,i)=>i===curBucket?'#ef4444cc':'#ef444444'),borderColor:'#ef4444',borderWidth:1,borderRadius:2,stack:'s'},
     ]},
-    options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{
-      cur:{type:'box',xMin:curBucket-0.5,xMax:curBucket+0.5,backgroundColor:'#f59e0b11',borderColor:'#f59e0b',borderWidth:1.5,
-        label:{content:'NOW',display:true,position:'start',color:'#f59e0b',font:{size:9,family:'IBM Plex Mono'},backgroundColor:'transparent'}}}}},
-      scales:{...bO.scales,y:{...bO.scales.y,max:100,stacked:true,ticks:{...bO.scales.y.ticks,callback:v=>v+'%'}},
-        x:{...bO.scales.x,stacked:true}}}});
+    options:{...bO,
+      plugins:{...bO.plugins,
+        title:{display:true,
+          text:`${revertFwd}-month forward | Current bucket (${curBucket*10}–${(curBucket+1)*10}th pct): fell ${cBktFellPct}% of time`,
+          color:'#94a3b8',font:{size:10,family:'IBM Plex Mono'}},
+        annotation:{annotations:{
+          cur:{type:'box',xMin:curBucket-0.45,xMax:curBucket+0.45,
+            backgroundColor:'#f59e0b08',borderColor:'#f59e0b',borderWidth:2,
+            label:{content:[`◀ YOU ARE HERE`,`${curBucket*10}–${(curBucket+1)*10}th pct`],
+              display:true,position:'start',color:'#f59e0b',
+              font:{size:9,weight:'bold',family:'IBM Plex Mono'},backgroundColor:'transparent'}}}}},
+      scales:{...bO.scales,
+        y:{...bO.scales.y,max:100,stacked:true,ticks:{...bO.scales.y.ticks,callback:v=>v+'%'}},
+        x:{...bO.scales.x,stacked:true}}},
+    });
 }
 
 // ─── UPDATE renderAll TO INCLUDE NEW TABS ─────────────────────────────────
