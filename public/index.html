@@ -96,11 +96,15 @@ td.L{text-align:left;color:var(--sub)}
   <div class="badge">EIA NYMEX DATA</div>
   <div class="badge" id="range-badge">Loading...</div>
   <div class="header-right">
-    <label title="Upload Aegis_Historical_C1C12_Weekly_2024-2026.xlsx to extend EIA data through present" style="cursor:pointer">
+    <label title="Upload Aegis_Historical_C1C24_Weekly_2024-2026.xlsx to extend EIA data through present with C1-C24" style="cursor:pointer">
       <input type="file" id="supp-file" accept=".xlsx" style="display:none" onchange="loadSupplement(this)"/>
-      <span id="supp-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload Aegis Supplement</span>
+      <span id="supp-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload Aegis C1–C24</span>
     </label>
     <span class="pill" id="supp-pill" style="display:none"></span>
+    <label title="Upload OVX history CSV from cboe.com — enables implied vol signal. Supports both: full history (DATE,OVX) or dashboard export (Date,Open,High,Low,Close)" style="cursor:pointer">
+      <input type="file" id="ovx-file" accept=".csv" style="display:none" onchange="loadOVXFile(this)"/>
+      <span id="ovx-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload OVX CSV</span>
+    </label>
     <span class="pill pill-loading" id="status-pill">● Loading</span>
   </div>
 </div>
@@ -234,29 +238,38 @@ td.L{text-align:left;color:var(--sub)}
         <button class="cb" id="rlz-cg" onclick="setRlzReg('contango')">Contango Only</button>
         <button class="cb" id="rlz-bw" onclick="setRlzReg('backwardated')">Backwardated Only</button>
       </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;color:var(--muted);font-weight:700">DIST TENOR:</span>
+        <select id="rlz-hist-tenor" onchange="renderRealization()">
+          <option value="all">All C1–C24</option>
+          <option value="1">C1</option><option value="3">C3</option><option value="6">C6</option>
+          <option value="9">C9</option><option value="12">C12</option>
+          <option value="18">C18</option><option value="24">C24</option>
+        </select>
+      </div>
     </div>
     <div class="insight" id="rlz-insight"></div>
     <div class="stats" id="rlz-stats"></div>
     <div class="g2">
       <div class="card sp2">
-        <div class="ct">PREDICTION ERROR BY TENOR — WAS THE STRIP RIGHT?</div>
-        <div class="cs">Average (realized − strip) for each contract month. Positive = strip underestimated (prices came in higher than predicted). Negative = strip overestimated (hedging captured a premium over realized).</div>
+        <div class="ct">PREDICTION ERROR BY TENOR C1–C24 — WAS THE STRIP RIGHT?</div>
+        <div class="cs">For each tenor Cn: at each historical date P, the strip predicted what price would be n months out. "Realized" = the actual C1 settle price when month P+n arrived. Positive (green) = strip underestimated; realized &gt; hedged price. Negative (red) = strip overestimated; hedging captured real forward premium. C13–C24 requires Aegis supplement upload.</div>
         <div style="position:relative"><canvas id="ch-rlz-tenor" height="160"></canvas></div>
       </div>
       <div class="card">
-        <div class="ct">REALIZED vs PREDICTED — SCATTER</div>
-        <div class="cs">Each dot = one contract month. Dots above diagonal = realized &gt; strip (strip was cheap). Below = strip was expensive.</div>
+        <div class="ct">REALIZED vs PREDICTED — SCATTER (CONTANGO / BACKWARDATED)</div>
+        <div class="cs">Each dot = one observation. Above diagonal = realized &gt; strip prediction (hedge was cheap). Below = strip was expensive. Color = curve shape at hedge date.</div>
         <div style="position:relative"><canvas id="ch-rlz-scatter" height="200"></canvas></div>
       </div>
       <div class="card">
-        <div class="ct">ERROR DISTRIBUTION (% OVERESTIMATE)</div>
-        <div class="cs">Distribution of (realized − strip) / strip × 100. Left of zero = strip overestimated actual prices.</div>
+        <div class="ct">ERROR DISTRIBUTION — <span id="rlz-hist-label">ALL TENORS</span></div>
+        <div class="cs">Distribution of (realized − strip) / strip × 100 for the selected tenor. X-axis = % deviation. Left of zero = strip overestimated (hedge was valuable). Source: EIA monthly for C1–C12, Aegis weekly supplement for C13–C24.</div>
         <div style="position:relative"><canvas id="ch-rlz-hist" height="200"></canvas></div>
       </div>
     </div>
     <div class="card">
-      <div class="ct">REALIZATION RATE BY CONTANGO vs BACKWARDATION</div>
-      <div class="cs">In contango environments, strip has historically overestimated realized prices — locking in the strip captures a real forward premium. In backwardation, the reverse.</div>
+      <div class="ct">REALIZATION RATE BY CONTANGO vs BACKWARDATION × TENOR GROUP</div>
+      <div class="cs">In contango: strip historically overestimates → lock in and capture the forward premium. In backwardation: strip underestimates → realized often comes in above the hedged price. Grouped into C1–C6, C7–C12, C13–C18, C19–C24.</div>
       <div style="position:relative"><canvas id="ch-rlz-regime" height="130"></canvas></div>
     </div>
   </div>
@@ -274,9 +287,9 @@ td.L{text-align:left;color:var(--sub)}
     <div class="insight" id="rg-insight"></div>
     <div class="g2">
       <div class="card sp2">
-        <div class="ct">COMPOSITE HEDGE SIGNAL — FULL HISTORY</div>
-        <div class="cs">0–100 score combining: strip percentile rank (40pts), curve shape vs. strip level regime (30pts), 3-mo price momentum (20pts), realized volatility proxy — lower vol = cheaper protection (10pts). Higher = stronger case for hedging now.</div>
-        <div style="position:relative"><canvas id="ch-rg-signal" height="160"></canvas></div>
+        <div class="ct">COMPOSITE HEDGE SIGNAL — FULL HISTORY WITH REALIZED-VS-STRIP LINES</div>
+        <div class="cs"><strong>Signal formula (0–100):</strong> Strip pct rank ×30 + Regime ×20 + 3-mo momentum ×15 + OVX implied vol ×20 (or strip vol ×15 if OVX unavailable) + COT prod. net short ×15. <strong>Colored lines (right axis):</strong> (avg realized − N-mo strip) / strip ×100 for 3, 6, 9, 12 month tenors. A positive value means realized came in above the hedged price (leaving money on table). Negative = hedge was valuable at that tenor.</div>
+        <div style="position:relative"><canvas id="ch-rg-signal" height="200"></canvas></div>
       </div>
       <div class="card">
         <div class="ct">REGIME MAP — STRIP LEVEL × CURVE SHAPE</div>
@@ -332,68 +345,103 @@ const KEY='clNi93nfcGdrKTdffUjRK2U6R8luhRZbYcEydnGT';
 let OVX_MONTHLY={};  // YYYY-MM → monthly avg OVX close
 let COT_WTI=[];      // [{date:'YYYY-MM-DD', netShortRatio, prodLong, prodShort, oi}, ...]
 
-// Fetch OVX full history from CBOE CDN (no key, CORS open)
-async function fetchOVX(){
-  const badge=$('ovx-badge');
-  try{
-    // CDN format: DATE,OVX  (DATE = MM/DD/YYYY)
-    const r=await fetch('https://cdn.cboe.com/api/global/us_indices/daily_prices/OVX_History.csv');
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const text=await r.text();
-    const lines=text.split('\n').filter(l=>l.trim()&&!l.startsWith('DATE')&&!l.startsWith('"'));
-    const monthly={};
-    lines.forEach(line=>{
-      const [dateStr,val]=line.split(',');
-      if(!dateStr||!val) return;
-      const parts=dateStr.trim().split('/');
-      if(parts.length!==3) return;
-      const period=`${parts[2]}-${parts[0].padStart(2,'0')}`;
-      const v=parseFloat(val);
-      if(isNaN(v)||v<=0) return;
-      if(!monthly[period]) monthly[period]=[];
-      monthly[period].push(v);
-    });
-    // Average daily values per month
-    Object.entries(monthly).forEach(([p,vals])=>{
-      OVX_MONTHLY[p]=+(vals.reduce((a,b)=>a+b)/vals.length).toFixed(2);
-    });
-    const months=Object.keys(OVX_MONTHLY).sort();
-    if(months.length>0){
-      badge.textContent=`✓ ${months.length} mo · ${months[0]} – ${months[months.length-1]}`;
-      badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
+// ── OVX: file upload handler (CBOE CDN has CORS restrictions on hosted pages)
+// Accepts both:
+//   Full history format: DATE,OVX  (from cdn.cboe.com/api/global/us_indices/daily_prices/OVX_History.csv)
+//   Dashboard export:   Date,Open,High,Low,Close  (from cboe.com index dashboard download)
+function loadOVXFile(input){
+  const file=input.files[0]; if(!file) return;
+  const btn=$('ovx-btn');
+  btn.textContent='⏳ Reading…'; btn.style.color='var(--amber)';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const text=e.target.result;
+      const lines=text.split('\n').filter(l=>l.trim()&&!l.startsWith(','));
+      // Detect format from header
+      const hdr=lines[0].trim().toLowerCase();
+      const isFullFormat=hdr.includes('date') && hdr.split(',').length<=2; // DATE,OVX
+      const isDashFormat=hdr.includes('close'); // Date,Open,High,Low,Close
+      const monthly={};
+      lines.forEach((line,li)=>{
+        if(li===0) return; // skip header
+        const parts=line.split(',');
+        if(parts.length<2) return;
+        const dateStr=parts[0].trim();
+        // Try M/D/YYYY and YYYY-MM-DD formats
+        let yr,mo;
+        const md=dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        const yd=dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if(md){yr=parseInt(md[3]);mo=parseInt(md[1]);}
+        else if(yd){yr=parseInt(yd[1]);mo=parseInt(yd[2]);}
+        else return;
+        // Get value: full format = col 1 (OVX close), dashboard = col 4 (Close)
+        const valIdx=isDashFormat?4:1;
+        const v=parseFloat(parts[valIdx]);
+        if(isNaN(v)||v<=0) return;
+        const period=`${yr}-${String(mo).padStart(2,'0')}`;
+        if(!monthly[period]) monthly[period]=[];
+        monthly[period].push(v);
+      });
+      Object.entries(monthly).forEach(([p,vals])=>{
+        OVX_MONTHLY[p]=+(vals.reduce((a,b)=>a+b)/vals.length).toFixed(2);
+      });
+      const months=Object.keys(OVX_MONTHLY).sort();
+      if(months.length>0){
+        btn.textContent=`✓ OVX ${months.length}mo`;
+        btn.style.color='var(--green)';
+        // Update badge
+        const badge=$('ovx-badge');
+        if(badge){badge.textContent=`✓ ${months.length} mo · ${months[0]} – ${months[months.length-1]}`;badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';}
+        if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
+      } else {
+        btn.textContent='⚠ Parse error'; btn.style.color='var(--red)';
+      }
+    }catch(err){
+      btn.textContent='⚠ Error'; btn.style.color='var(--red)';
+      console.error('OVX load error:',err);
     }
-    // Re-render regime if already active
-    if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
-  }catch(e){
-    console.warn('OVX fetch failed:',e.message);
-    badge.textContent='⚠ Unavailable';
-    badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
-  }
+  };
+  reader.readAsText(file);
 }
 
-// Fetch COT Disaggregated Futures-Only for WTI from CFTC Socrata API (no key)
+// Fetch COT Disaggregated Futures-Only for WTI from CFTC Socrata API (no key required)
 async function fetchCOT(){
   const badge=$('cot-badge');
   const WTI_NAME='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE';
-  // Pull last 800 weeks (~15 years), sorted ascending
-  const url=`https://publicreporting.cftc.gov/resource/72hh-3qpy.json?$where=market_and_exchange_names=%27${encodeURIComponent(WTI_NAME)}%27&$order=report_date_as_yyyy_mm_dd%20ASC&$limit=800`;
+  // Use $limit=5000 to ensure full history; order ASC for chronological
+  const url=`https://publicreporting.cftc.gov/resource/72hh-3qpy.json?$where=market_and_exchange_names=%27${encodeURIComponent(WTI_NAME)}%27&$order=report_date_as_yyyy_mm_dd%20ASC&$limit=5000`;
   try{
     const r=await fetch(url);
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const data=await r.json();
-    if(!Array.isArray(data)||data.length===0) throw new Error('empty');
+    if(!Array.isArray(data)||data.length===0) throw new Error('empty response');
+    // CFTC Socrata may return numbers as strings with commas (e.g. "386,821")
+    // parseNum handles both "386821", "386,821", and actual JS numbers
+    const parseNum=v=>{
+      if(v==null||v===''||v===undefined) return 0;
+      if(typeof v==='number') return v;
+      return parseFloat(String(v).replace(/,/g,''))||0;
+    };
+    // Log first record keys for debugging if fields return 0
+    if(data.length>0){
+      const sample=data[0];
+      const longVal=parseNum(sample.prod_merc_positions_long_all||sample['Prod_Merc_Positions_Long_All']);
+      if(longVal===0){
+        console.warn('COT: prod_merc_positions_long_all returned 0. Sample record keys:',Object.keys(sample).slice(0,20));
+      }
+    }
     COT_WTI=data.map(d=>{
-      const long=parseFloat(d.prod_merc_positions_long_all)||0;
-      const short=parseFloat(d.prod_merc_positions_short_all)||0;
-      const oi=parseFloat(d.open_interest_all)||1;
-      return{
-        date:String(d.report_date_as_yyyy_mm_dd||'').slice(0,10),
-        prodLong:long, prodShort:short, oi,
-        netShortRatio:+((short-long)/oi).toFixed(4)
-      };
-    }).filter(d=>d.date&&d.oi>0);
+      // Try both snake_case and Title_Case field names
+      const long=parseNum(d.prod_merc_positions_long_all||d['Prod_Merc_Positions_Long_All']||d.posi_prod_merc_long_all||0);
+      const short=parseNum(d.prod_merc_positions_short_all||d['Prod_Merc_Positions_Short_All']||d.posi_prod_merc_short_all||0);
+      const oi=parseNum(d.open_interest_all||d['Open_Interest_All']||d.open_interest||1)||1;
+      const dateStr=(d.report_date_as_yyyy_mm_dd||d['As_of_Date_Form_YYYY-MM-DD']||d.as_of_date_form_yyyy_mm_dd||'').slice(0,10);
+      return{date:dateStr,prodLong:long,prodShort:short,oi,netShortRatio:+((short-long)/oi).toFixed(4)};
+    }).filter(d=>d.date&&d.oi>1);
     if(COT_WTI.length>0){
       const latest=COT_WTI[COT_WTI.length-1];
+      const allNSR=COT_WTI.map(d=>d.netShortRatio);
       const pctRank=Math.round(COT_WTI.filter(d=>d.netShortRatio<latest.netShortRatio).length/COT_WTI.length*100);
       badge.textContent=`✓ ${COT_WTI.length} wks · NSR ${(latest.netShortRatio*100).toFixed(1)}% · ${pctRank}th pct`;
       badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
@@ -401,7 +449,7 @@ async function fetchCOT(){
     if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
   }catch(e){
     console.warn('COT fetch failed:',e.message);
-    badge.textContent='⚠ Unavailable';
+    badge.textContent='⚠ Unavailable — CORS or network issue';
     badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
   }
 }
@@ -433,88 +481,75 @@ function loadSupplement(inp){
   pill.className='pill pill-loading';
   pill.textContent='● Parsing…';
   btn.style.color='var(--muted)';
-
   const reader=new FileReader();
   reader.onload=e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-
-      // Validate expected sheets exist
       const hasHH=wb.SheetNames.some(s=>s.includes('HH'));
       const hasWTI=wb.SheetNames.some(s=>s.includes('WTI'));
-      if(!hasHH||!hasWTI) throw new Error('Expected sheets HH_Weekly_C1C12 and WTI_Weekly_C1C12 not found. Check file.');
-
+      if(!hasHH||!hasWTI) throw new Error('Sheets with "HH" and "WTI" not found. Upload Aegis_Historical_C1C24_Weekly_2024-2026.xlsx');
       const hhSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('HH'))];
       const wtiSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('WTI'))];
-
-      // Parse a C1-C12 sheet → {[YYYY-MM]: {1:price, 2:price, ...}}
-      // Uses last weekly snapshot per month
+      // Parse C1–C24 sheet → {YYYY-MM: {1:p, …, 24:p}}
+      // Detects max contracts from header; uses last weekly snapshot per month
       function parseSheet(ws){
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
         if(rows.length<2) throw new Error('Sheet appears empty');
-        // rows[0] = headers; rows[1..] = data
-        const out={}; // YYYY-MM → {1..12}
+        const hdr=rows[0];
+        let maxC=0;
+        hdr.forEach(h=>{if(h&&/^C\d+$/.test(String(h).trim())){const n=parseInt(String(h).slice(1));if(n>maxC)maxC=n;}});
+        if(maxC===0) maxC=12; // fallback for older C1C12 format
+        const out={};
         for(let r=1;r<rows.length;r++){
           const row=rows[r];
-          if(!row||!row[0])continue;
-          // Column 0 = As-Of Date (may be JS Date or string MM/DD/YYYY)
+          if(!row||!row[0]) continue;
           let dt=row[0];
           if(typeof dt==='string'){
-            const parts=dt.split('/');
-            if(parts.length===3) dt=new Date(+parts[2],+parts[0]-1,+parts[1]);
+            const ymd=dt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            const mdy=dt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if(ymd) dt=new Date(+ymd[1],+ymd[2]-1,+ymd[3]);
+            else if(mdy) dt=new Date(+mdy[3],+mdy[1]-1,+mdy[2]);
             else dt=new Date(dt);
           }
           if(!(dt instanceof Date)||isNaN(dt)) continue;
           const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-          // Columns 1-12 = C1-C12 prices
           const contracts={};
-          for(let c=1;c<=12;c++){
+          for(let c=1;c<=maxC;c++){
             const v=parseFloat(row[c]);
             if(!isNaN(v)&&v>0) contracts[c]=v;
           }
-          if(Object.keys(contracts).length<3) continue; // skip sparse rows
-          // Last-write wins → later rows in same month overwrite earlier (ascending sort = last week wins)
-          out[period]=contracts;
+          if(Object.keys(contracts).length<3) continue;
+          out[period]=contracts; // ascending rows → last week of month wins
         }
-        return out;
+        return{data:out,maxC};
       }
-
-      const hhData=parseSheet(hhSheet);
-      const wtiData=parseSheet(wtiSheet);
-
+      const {data:hhData,maxC:hhMax}=parseSheet(hhSheet);
+      const {data:wtiData,maxC:wtiMax}=parseSheet(wtiSheet);
       const hhPeriods=Object.keys(hhData).length;
       const wtiPeriods=Object.keys(wtiData).length;
-      if(hhPeriods<6||wtiPeriods<6) throw new Error(`Too few periods parsed (HH:${hhPeriods}, WTI:${wtiPeriods}). Check file format.`);
-
-      // Merge into global OIL/GAS — Aegis takes precedence on overlap
+      if(hhPeriods<6||wtiPeriods<6) throw new Error(`Too few periods (HH:${hhPeriods}, WTI:${wtiPeriods})`);
       let mergedNew=0,mergedOverlap=0;
       Object.entries(wtiData).forEach(([p,contracts])=>{
         const isNew=!OIL[p]||!OIL[p][1];
         if(isNew) mergedNew++; else mergedOverlap++;
-        OIL[p]=contracts;
+        // Merge: Aegis C1–C24 into existing; EIA's C1–C12 still preserved where Aegis is null
+        OIL[p]={...(OIL[p]||{}),...contracts};
       });
       Object.entries(hhData).forEach(([p,contracts])=>{
-        GAS[p]=contracts;
+        GAS[p]={...(GAS[p]||{}),...contracts};
       });
-
-      // Rebuild PERIODS (same filter as loadData)
       PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
         .filter(p=>{const o=OIL[p];return o&&o[1]&&o[3];}).sort();
-
       SUPP_LOADED=true;
-      inp.value=''; // reset so same file can be re-uploaded if needed
-
-      // Update UI
+      inp.value='';
       pill.className='pill pill-ok';
       const latest=PERIODS[PERIODS.length-1];
-      pill.textContent=`● +${hhPeriods} mo Aegis (${mergedNew} new · ${mergedOverlap} overlap)`;
+      const cMax=Math.max(wtiMax,hhMax);
+      pill.textContent=`● +${hhPeriods} mo Aegis C1–C${cMax} (${mergedNew} new · ${mergedOverlap} overlap)`;
       btn.style.color='var(--green)';
-      btn.textContent='✓ Supplement Loaded';
+      btn.textContent=`✓ C1–C${cMax} Loaded`;
       $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${latest}`;
-
-      // Re-render all charts with extended data
       if(typeof renderAll==='function') renderAll();
-
     }catch(err){
       console.error('Supplement parse error:',err);
       pill.className='pill pill-err';
@@ -522,10 +557,7 @@ function loadSupplement(inp){
       btn.style.color='var(--red)';
     }
   };
-  reader.onerror=()=>{
-    pill.className='pill pill-err';
-    pill.textContent='● File read failed';
-  };
+  reader.onerror=()=>{pill.className='pill pill-err';pill.textContent='● File read failed';};
   reader.readAsArrayBuffer(file);
 }
 const f$=(v,d=2)=>v==null?'—':'$'+(+v).toFixed(d);
@@ -1098,10 +1130,13 @@ function getRlzErrors(c,fromYear,regFilter){
   PERIODS.forEach(p=>{
     if(parseInt(p)<fromYear) return;
     const s=store[p]; if(!s||!s[1]) return;
-    const c1=s[1],c12=s[12];
-    const regime=c12&&c1?(c12>c1?'contango':'backwardated'):'unknown';
+    // Classify curve shape using whatever anchor contract is available (prefer c12, fallback c6)
+    const c1=s[1];
+    const anchor=s[12]||s[6]||s[3];
+    const regime=anchor?(anchor>c1?'contango':'backwardated'):'unknown';
     if(regFilter!=='all'&&regime!==regFilter) return;
-    for(let n=1;n<=12;n++){
+    // Evaluate all available tenors C1–C24
+    for(let n=1;n<=24;n++){
       const predicted=s[n]; if(!predicted||predicted<=0) continue;
       // Delivery period = p + (n-1) months
       const [yr,mo]=p.split('-').map(Number);
@@ -1129,31 +1164,33 @@ function renderRealization(){
   const n=errs.length;
   const meanErr=errs.reduce((s,e)=>s+e.error,0)/n;
   const meanPct=errs.reduce((s,e)=>s+e.pctErr,0)/n;
-  const overEst=errs.filter(e=>e.error<0).length; // strip > realized
+  const overEst=errs.filter(e=>e.error<0).length;
   const underEst=errs.filter(e=>e.error>0).length;
   const rmse=Math.sqrt(errs.reduce((s,e)=>s+e.error*e.error,0)/n);
+  const maxTenor=Math.max(...errs.map(e=>e.n));
 
   $('rlz-stats').innerHTML=`
-    <div class="stat"><div class="sl">Obs</div><div class="sv" style="font-size:16px">${n.toLocaleString()}</div><div class="ss">contract months</div></div>
-    <div class="stat"><div class="sl">Mean Error</div><div class="sv" style="color:${meanErr>0?'#22c55e':'#ef4444'}">${meanErr>0?'+':''}${meanErr.toFixed(2)}</div><div class="ss">realized − predicted</div></div>
-    <div class="stat"><div class="sl">Mean Error %</div><div class="sv" style="color:${meanPct>0?'#22c55e':'#ef4444'}">${meanPct>0?'+':''}${meanPct.toFixed(1)}%</div><div class="ss">avg pct deviation</div></div>
-    <div class="stat"><div class="sl">Strip Overestimated</div><div class="sv" style="color:#ef4444">${(overEst/n*100).toFixed(0)}%</div><div class="ss">of months</div></div>
-    <div class="stat"><div class="sl">Strip Underestimated</div><div class="sv" style="color:#22c55e">${(underEst/n*100).toFixed(0)}%</div><div class="ss">of months</div></div>
-    <div class="stat"><div class="sl">RMSE</div><div class="sv">${rmse.toFixed(2)}</div><div class="ss">root mean sq error</div></div>`;
+    <div class="stat"><div class="sl">Observations</div><div class="sv" style="font-size:16px">${n.toLocaleString()}</div><div class="ss">hedge-month/tenor pairs</div></div>
+    <div class="stat"><div class="sl">Mean Error</div><div class="sv" style="color:${meanErr>0?'#22c55e':'#ef4444'}">${meanErr>0?'+':''}${meanErr.toFixed(2)}</div><div class="ss">realized − predicted ${unit}</div></div>
+    <div class="stat"><div class="sl">Mean Error %</div><div class="sv" style="color:${meanPct>0?'#22c55e':'#ef4444'}">${meanPct>0?'+':''}${meanPct.toFixed(1)}%</div><div class="ss">(realized−strip)/strip</div></div>
+    <div class="stat"><div class="sl">Strip Overestimated</div><div class="sv" style="color:#ef4444">${(overEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
+    <div class="stat"><div class="sl">Strip Underestimated</div><div class="sv" style="color:#22c55e">${(underEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
+    <div class="stat"><div class="sl">Max Tenor</div><div class="sv">C${maxTenor}</div><div class="ss">upload Aegis for C13–C24</div></div>`;
 
   const dir=meanErr<0?'overestimated realized prices':'underestimated realized prices';
   const action=meanErr<0
-    ?`Strip was <strong style="color:#22c55e">pessimistic</strong> about future prices. Locking in the strip captured a real forward premium — hedging paid off on average in this environment.`
-    :`Strip was <strong style="color:#ef4444">optimistic</strong> about future prices. Realized prices came in higher, meaning unhedged producers captured more value. This is the risk of waiting.`;
-  $('rlz-insight').innerHTML=`<strong>Key finding (${RLZ_ERA==='all'?'2010+':RLZ_ERA==='2015'?'2015+':'Post-COVID'} ${RLZ_REG!=='all'?'· '+RLZ_REG:''}):</strong> Strip historically ${dir} by an average of <strong>${Math.abs(meanErr).toFixed(2)}${unit} (${Math.abs(meanPct).toFixed(1)}%)</strong> across all tenors. ${action}`;
+    ?`Strip was <strong style="color:#22c55e">pessimistic</strong> about future prices. Locking in the strip captured a real forward premium — hedging paid off on average.`
+    :`Strip was <strong style="color:#ef4444">optimistic</strong> about future prices. Realized prices came in higher — unhedged positions captured more value. This is the risk of waiting.`;
+  $('rlz-insight').innerHTML=`<strong>Key finding (${RLZ_ERA==='all'?'2010+':RLZ_ERA==='2015'?'2015+':'Post-COVID'} ${RLZ_REG!=='all'?'· '+RLZ_REG:''}):</strong> Strip historically ${dir} by avg <strong>${Math.abs(meanErr).toFixed(2)}${unit} (${Math.abs(meanPct).toFixed(1)}%)</strong> across C1–C${maxTenor}. ${action}`;
 
-  // Chart 1: avg error by tenor C1–C12
-  const byTenor=Array.from({length:12},(_,i)=>{
+  // Chart 1: avg error by tenor C1–C24 (show all available tenors)
+  const maxT=Math.min(24,maxTenor||12);
+  const byTenor=Array.from({length:maxT},(_,i)=>{
     const te=errs.filter(e=>e.n===i+1);
-    return te.length?te.reduce((s,e)=>s+e.error,0)/te.length:null;
+    return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;
   });
   CH['ch-rlz-tenor']=new Chart($('ch-rlz-tenor'),{type:'bar',data:{
-    labels:Array.from({length:12},(_,i)=>`C${i+1}`),
+    labels:Array.from({length:maxT},(_,i)=>`C${i+1}`),
     datasets:[{label:'Avg (Realized − Predicted)',data:byTenor,
       backgroundColor:byTenor.map(v=>v==null?'transparent':v>=0?'#22c55e88':'#ef444488'),
       borderColor:byTenor.map(v=>v==null?'transparent':v>=0?'#22c55e':'#ef4444'),
@@ -1161,49 +1198,77 @@ function renderRealization(){
     options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1}}}},
       scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>0?'+':'')+v.toFixed(2)+unit}}}}});
 
-  // Chart 2: scatter predicted vs realized (sample 600 for perf)
-  const sample=errs.length>600?errs.filter((_,i)=>i%Math.ceil(errs.length/600)===0):errs;
-  CH['ch-rlz-scatter']=new Chart($('ch-rlz-scatter'),{type:'scatter',data:{datasets:[
-    {label:'Contango',data:sample.filter(e=>e.regime==='contango').map(e=>({x:e.predicted,y:e.realized})),
-      backgroundColor:'#f59e0b55',pointRadius:2,pointHoverRadius:4},
-    {label:'Backwardated',data:sample.filter(e=>e.regime==='backwardated').map(e=>({x:e.predicted,y:e.realized})),
-      backgroundColor:'#06b6d455',pointRadius:2,pointHoverRadius:4},
-    // Perfect prediction line
-    {label:'Perfect prediction',data:(()=>{const ps=errs.map(e=>e.predicted);const mn=Math.min(...ps),mx=Math.max(...ps);return[{x:mn,y:mn},{x:mx,y:mx}];})(),
-      type:'line',borderColor:'#475569',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}
-  ]},options:{...bO,scales:{
-    x:{...bO.scales.x,title:{display:true,text:'Predicted (strip)',color:TC,font:{size:9}}},
-    y:{...bO.scales.y,title:{display:true,text:'Realized',color:TC,font:{size:9}},ticks:{...bO.scales.y.ticks,callback:v=>'$'+v.toFixed(0)}}}}});
+  // Chart 2: scatter predicted vs realized — safe spread for empty sets
+  const sample=errs.length>800?errs.filter((_,i)=>i%Math.ceil(errs.length/800)===0):errs;
+  const cangoPts=sample.filter(e=>e.regime==='contango').map(e=>({x:e.predicted,y:e.realized}));
+  const backwPts=sample.filter(e=>e.regime==='backwardated').map(e=>({x:e.predicted,y:e.realized}));
+  // Build diagonal ref line safely (guard against empty errs)
+  const allPred=errs.map(e=>e.predicted);
+  const diagPts=allPred.length>=2
+    ?[{x:Math.min(...allPred),y:Math.min(...allPred)},{x:Math.max(...allPred),y:Math.max(...allPred)}]
+    :[];
+  const scatterDatasets=[
+    {label:'Contango',data:cangoPts,backgroundColor:'#f59e0b55',pointRadius:2,pointHoverRadius:4},
+    {label:'Backwardated',data:backwPts,backgroundColor:'#06b6d455',pointRadius:2,pointHoverRadius:4}
+  ];
+  if(diagPts.length){
+    scatterDatasets.push({label:'Perfect prediction',data:diagPts,type:'line',
+      borderColor:'#47556999',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false});
+  }
+  CH['ch-rlz-scatter']=new Chart($('ch-rlz-scatter'),{type:'scatter',data:{datasets:scatterDatasets},
+    options:{...bO,scales:{
+      x:{...bO.scales.x,title:{display:true,text:'Predicted (strip at hedge date)',color:TC,font:{size:9}}},
+      y:{...bO.scales.y,title:{display:true,text:'Realized (C1 at delivery)',color:TC,font:{size:9}},ticks:{...bO.scales.y.ticks,callback:v=>'$'+v.toFixed(0)}}}}});
 
-  // Chart 3: error histogram
-  const bins=20;
-  const pcts=errs.map(e=>e.pctErr);
-  const minP=Math.floor(Math.min(...pcts)/5)*5,maxP=Math.ceil(Math.max(...pcts)/5)*5;
-  const bSize=(maxP-minP)/bins;
-  const bLabels=Array.from({length:bins},(_,i)=>(minP+i*bSize).toFixed(0)+'%');
-  const bCounts=Array.from({length:bins},(_,i)=>{const lo=minP+i*bSize,hi=lo+bSize;return pcts.filter(v=>v>=lo&&v<hi).length;});
-  CH['ch-rlz-hist']=new Chart($('ch-rlz-hist'),{type:'bar',data:{
-    labels:bLabels,
-    datasets:[{label:'# months',data:bCounts,
-      backgroundColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e55':'#ef444455'),
-      borderColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e':'#ef4444'),
-      borderWidth:1,borderRadius:2}]},
-    options:{...bO,scales:{...bO.scales,x:{...bO.scales.x,ticks:{...bO.scales.x.ticks,maxRotation:45,font:{size:8}}}}}});
+  // Chart 3: error histogram — filtered by selected tenor dropdown
+  const histTenorSel=$('rlz-hist-tenor')?.value||'all';
+  const histErrs=histTenorSel==='all'?errs:errs.filter(e=>e.n===+histTenorSel);
+  const histLabel=histTenorSel==='all'?`ALL TENORS (C1–C${maxT})`:`C${histTenorSel} ONLY`;
+  if($('rlz-hist-label')) $('rlz-hist-label').textContent=histLabel;
+  if(histErrs.length>0){
+    const bins=24;
+    const pcts=histErrs.map(e=>e.pctErr);
+    const minP=Math.max(-150,Math.floor(Math.min(...pcts)/5)*5);
+    const maxPv=Math.min(150,Math.ceil(Math.max(...pcts)/5)*5);
+    const bSize=Math.max(1,(maxPv-minP)/bins);
+    const bLabels=Array.from({length:bins},(_,i)=>(minP+i*bSize).toFixed(0)+'%');
+    const bCounts=Array.from({length:bins},(_,i)=>{const lo=minP+i*bSize,hi=lo+bSize;return pcts.filter(v=>v>=lo&&v<hi).length;});
+    const obsLabel=histTenorSel==='all'?'# observations':'# observations';
+    CH['ch-rlz-hist']=new Chart($('ch-rlz-hist'),{type:'bar',data:{
+      labels:bLabels,
+      datasets:[{label:obsLabel,data:bCounts,
+        backgroundColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e55':'#ef444455'),
+        borderColor:bLabels.map(l=>parseFloat(l)>=0?'#22c55e':'#ef4444'),
+        borderWidth:1,borderRadius:2}]},
+      options:{...bO,plugins:{...bO.plugins,title:{display:true,
+        text:`${histErrs.length.toLocaleString()} observations · mean ${(histErrs.reduce((s,e)=>s+e.pctErr,0)/histErrs.length).toFixed(1)}%`,
+        color:'#94a3b8',font:{size:10,family:'IBM Plex Mono'}}},
+        scales:{...bO.scales,x:{...bO.scales.x,ticks:{...bO.scales.x.ticks,maxRotation:45,font:{size:8}}}}}});
+  } else {
+    $('ch-rlz-hist').getContext('2d').clearRect(0,0,999,999);
+  }
 
-  // Chart 4: avg error by regime × tenor groups
+  // Chart 4: avg error by regime × tenor groups C1–C6, C7–C12, C13–C18, C19–C24
   const regimes=['contango','backwardated'];
-  const tenorGroups=['C1–C3','C4–C6','C7–C9','C10–C12'];
-  const tenorRanges=[[1,3],[4,6],[7,9],[10,12]];
+  const tenorGroups=['C1–C6','C7–C12','C13–C18','C19–C24'];
+  const tenorRanges=[[1,6],[7,12],[13,18],[19,24]];
+  // Only show groups that have data
+  const activeGroups=tenorGroups.map((g,i)=>{
+    const [lo,hi]=tenorRanges[i];
+    return errs.some(e=>e.n>=lo&&e.n<=hi);
+  });
+  const filteredGroups=tenorGroups.filter((_,i)=>activeGroups[i]);
+  const filteredRanges=tenorRanges.filter((_,i)=>activeGroups[i]);
   CH['ch-rlz-regime']=new Chart($('ch-rlz-regime'),{type:'bar',data:{
-    labels:tenorGroups,
+    labels:filteredGroups,
     datasets:regimes.map((reg,ri)=>({
       label:reg.charAt(0).toUpperCase()+reg.slice(1),
-      data:tenorRanges.map(([lo,hi])=>{const te=errs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(2):null;}),
+      data:filteredRanges.map(([lo,hi])=>{const te=errs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;}),
       backgroundColor:ri===0?'#f59e0b66':'#06b6d466',
       borderColor:ri===0?'#f59e0b':'#06b6d4',
       borderWidth:1,borderRadius:3}))},
     options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1}}}},
-      scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>0?'+':'')+v.toFixed(2)}}}}});
+      scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>0?'+':'')+v.toFixed(2)+unit}}}}});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1218,7 +1283,10 @@ function classifyRegime(p,c,medianStrip){
   const store=c==='oil'?OIL:GAS;
   const s=store[p]; if(!s||!s[1]) return null;
   const avg=stripAvg(p,c); if(!avg) return null;
-  const c1=s[1],c12=s[12]; if(!c12) return null;
+  const c1=s[1];
+  // Use best available deferred contract as anchor: prefer c12, fallback c6, c3
+  const anchor=s[12]||s[6]||s[3]; if(!anchor) return null;
+  const c12=anchor; // named c12 for backward compat below
   const contango=c12>c1;
   const highStrip=avg>=medianStrip;
   const spread=+(c12-c1).toFixed(3);
@@ -1234,8 +1302,9 @@ function computeSignal(p,c,allVals,allAvgsSorted){
   const avg=stripAvg(p,c); if(!avg) return null;
   const pctRank=pctile(avg,allVals)/100;
   const pctScore=pctRank*30;
-  const c1=s[1],c12=s[12]||c1;
-  const contango=c12>c1;
+  const c1=s[1];
+  const anchorC=s[12]||s[6]||s[3]||c1;
+  const contango=anchorC>c1;
   const medianStrip=allVals.slice().sort((a,b)=>a-b)[Math.floor(allVals.length/2)];
   const highStrip=avg>=medianStrip;
   const regScore=highStrip&&contango?20:highStrip&&!contango?15:!highStrip&&!contango?10:6;
@@ -1294,8 +1363,9 @@ function renderRegime(){
   // COT (15pts if available, else 0)
   const pctRank=latPct/100;
   const pctScore=pctRank*30;
-  const c1=(c==='oil'?OIL:GAS)[lat]?.[1],c12=(c==='oil'?OIL:GAS)[lat]?.[12]||c1;
-  const contango=c12>c1, highStrip=latAvg>=medianStrip;
+  const c1=(c==='oil'?OIL:GAS)[lat]?.[1];
+  const anchorLat=(c==='oil'?OIL:GAS)[lat]?.[12]||(c==='oil'?OIL:GAS)[lat]?.[6]||c1;
+  const contango=anchorLat>c1, highStrip=latAvg>=medianStrip;
   const regScore=highStrip&&contango?20:highStrip&&!contango?15:!highStrip&&!contango?10:6;
   const pidx=PERIODS.indexOf(lat);
   let momScore=8;
@@ -1351,18 +1421,71 @@ function renderRegime(){
       </div>`;}).join('')}
   </div>`;
 
-  // ── Chart 1: Signal history ───────────────────────────────────────────────
+  // ── Chart 1: Signal history + 4 realized-vs-strip tenor lines ───────────
+  // For each hedge month P and tenor N, "realized-vs-strip" =
+  //   (avg C1 price in months P+1..P+N  −  strip_at_P) / strip_at_P × 100
+  // Positive = realized > hedged price (hedge left money on table)
+  // Negative = realized < hedged price (hedge was valuable)
+  const store2=c==='oil'?OIL:GAS;
+  const tenorLines=[3,6,9,12];
+  const tenorColors=['#22c55e','#06b6d4','#f59e0b','#a78bfa'];
+  const rvs={}; // {tenor: [{p, pct}]}
+  tenorLines.forEach(tn=>{
+    rvs[tn]=[];
+    PERIODS.forEach(p=>{
+      const strip=stripAvg(p,c); if(!strip||strip<=0) return;
+      const [yr,mo]=p.split('-').map(Number);
+      const realPrices=[];
+      for(let m=1;m<=tn;m++){
+        const dd=new Date(yr,mo-1+m,1);
+        const dp=`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}`;
+        const v=store2[dp]?.[1];
+        if(v&&v>0) realPrices.push(v);
+      }
+      if(realPrices.length<Math.max(1,Math.floor(tn*0.5))) return; // need at least half the months
+      const avgReal=realPrices.reduce((a,b)=>a+b)/realPrices.length;
+      rvs[tn].push({p, pct:+((avgReal-strip)/strip*100).toFixed(2)});
+    });
+  });
   const signalHistory=PERIODS.map(p=>({p,v:computeSignal(p,c,allVals,[])})).filter(d=>d.v!=null);
+  // Build unified labels (signal history periods)
+  const sigLabels=signalHistory.map(d=>d.p);
+  const rvsDatasets=tenorLines.map((tn,ti)=>{
+    const lookup=Object.fromEntries(rvs[tn].map(d=>[d.p,d.pct]));
+    return{
+      label:`${tn}-mo realized vs strip`,
+      data:sigLabels.map(p=>lookup[p]??null),
+      borderColor:tenorColors[ti],borderWidth:1.2,pointRadius:0,tension:0.3,
+      fill:false,yAxisID:'y2',spanGaps:false
+    };
+  });
   CH['ch-rg-signal']=new Chart($('ch-rg-signal'),{type:'line',data:{
-    labels:signalHistory.map(d=>d.p),
-    datasets:[{label:'Hedge Signal',data:signalHistory.map(d=>d.v),
-      borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#6366f118',tension:0.3},
-    {label:'Today',data:signalHistory.map(d=>d.p===lat?d.v:null),
-      pointRadius:6,pointBackgroundColor:signalColor,borderColor:signalColor,borderWidth:0,showLine:false}]},
-    options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{
-      h70:{type:'line',yMin:70,yMax:70,borderColor:'#22c55e55',borderWidth:1,borderDash:[4,4]},
-      h40:{type:'line',yMin:40,yMax:40,borderColor:'#ef444455',borderWidth:1,borderDash:[4,4]}}}},
-      scales:{...bO.scales,y:{...bO.scales.y,min:0,max:100,ticks:{...bO.scales.y.ticks,callback:v=>v+'/100'}}}}});
+    labels:sigLabels,
+    datasets:[
+      {label:'Hedge Signal (0–100)',data:signalHistory.map(d=>d.v),
+        borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#6366f118',tension:0.3,yAxisID:'y'},
+      {label:'Today',data:signalHistory.map(d=>d.p===lat?d.v:null),
+        pointRadius:6,pointBackgroundColor:signalColor,borderColor:signalColor,borderWidth:0,showLine:false,yAxisID:'y'},
+      ...rvsDatasets
+    ]},
+    options:{...bO,
+      interaction:{mode:'index',intersect:false},
+      plugins:{...bO.plugins,
+        legend:{...bO.plugins?.legend,display:true,labels:{color:'#94a3b8',font:{size:9,family:'IBM Plex Mono'},boxWidth:12,padding:8}},
+        annotation:{annotations:{
+          h70:{type:'line',yMin:70,yMax:70,borderColor:'#22c55e44',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
+          h40:{type:'line',yMin:40,yMax:40,borderColor:'#ef444444',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
+          z0:{type:'line',yMin:0,yMax:0,borderColor:'#47556944',borderWidth:1,borderDash:[2,4],yScaleID:'y2'}}}},
+      scales:{
+        ...bO.scales,
+        y:{...bO.scales.y,min:0,max:100,position:'left',
+          title:{display:true,text:'Hedge Signal',color:'#6366f1',font:{size:9}},
+          ticks:{...bO.scales.y.ticks,callback:v=>v+'/100'}},
+        y2:{type:'linear',position:'right',
+          title:{display:true,text:'(Realized − Strip) / Strip %',color:'#94a3b8',font:{size:9}},
+          ticks:{color:'#64748b',font:{size:8,family:'IBM Plex Mono'},callback:v=>(v>0?'+':'')+v.toFixed(0)+'%'},
+          grid:{drawOnChartArea:false},
+          border:{color:'#1e3050'}}}}});
 
   // ── Chart 2: Forward outcomes in same regime ──────────────────────────────
   if(latReg){
@@ -1393,6 +1516,16 @@ function renderRegime(){
 
   // ── Chart 3: OVX history ─────────────────────────────────────────────────
   const ovxPeriods=PERIODS.filter(p=>OVX_MONTHLY[p]!=null);
+  // Show upload prompt when no OVX data loaded
+  const ovxEl=$('ch-rg-ovx');
+  if(ovxPeriods.length===0&&ovxEl){
+    const ctx2=ovxEl.getContext('2d');
+    ctx2.clearRect(0,0,ovxEl.width,ovxEl.height);
+    ctx2.fillStyle='#64748b';ctx2.font='12px IBM Plex Mono';ctx2.textAlign='center';
+    ctx2.fillText('⬆  Upload OVX CSV (CBOE) to enable this chart',ovxEl.width/2,ovxEl.height/2-10);
+    ctx2.fillStyle='#475569';ctx2.font='10px IBM Plex Mono';
+    ctx2.fillText('Download from cboe.com → Indices → OVX → download icon',ovxEl.width/2,ovxEl.height/2+14);
+  }
   if(ovxPeriods.length>6){
     const allOVX=ovxPeriods.map(p=>OVX_MONTHLY[p]);
     const curOVXPct=latOVX?pctile(latOVX,allOVX):null;
@@ -1509,7 +1642,8 @@ function renderRegime(){
 
 // ─── BOOT ────────────────────────────────────────────────────
 loadData();
-fetchOVX();
+// OVX: upload via header button (CBOE CDN blocked cross-origin from hosted pages)
+// COT: fetched live from CFTC public API
 fetchCOT();
 </script>
 </body>
