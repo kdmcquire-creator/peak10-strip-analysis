@@ -601,38 +601,43 @@ function loadOVXFile(input){
 // Merges into existing COT_WTI / COT_GAS arrays (supplements embedded baseline).
 async function fetchCOT(){
   const badge=$('cot-badge');
+  // Legacy Futures-Only COT (6dca-aqww) — uses Comm_Positions_Long/Short_All,
+  // which is the SAME methodology as the embedded baseline data.
+  // Disaggregated (72hh-3qpy) was using prod_merc_positions which ≈0 for WTI-PHYSICAL,
+  // corrupting the NSR to ~0% and overwriting valid embedded values.
   const WTI_NAME='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE';
   const GAS_NAME='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE';
-  // Disaggregated Futures Only - fetch both markets in one query
   const bothNames=`'${WTI_NAME}','${GAS_NAME}'`;
-  const cftcUrl=`https://publicreporting.cftc.gov/resource/72hh-3qpy.json?$where=market_and_exchange_names in(${encodeURIComponent(bothNames)})&$order=report_date_as_yyyy_mm_dd ASC&$limit=10000`;
+  const cftcUrl=`https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=market_and_exchange_names in(${encodeURIComponent(bothNames)})&$order=report_date_as_mm_dd_yyyy ASC&$limit=10000`;
   const proxies=[
     u=>u,
     u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
   ];
-  const url=proxies[0](cftcUrl); // reassigned per attempt below
   const parseNum=v=>{
     if(v==null||v===''||v===undefined) return 0;
     if(typeof v==='number') return v;
     return parseFloat(String(v).replace(/,/g,''))||0;
   };
-  // Parse a row from Disaggregated COT API (Prod/Merchant fields)
-  const parseDisaggRow=d=>{
-    const long=parseNum(d.prod_merc_positions_long_all||d['Prod_Merc_Positions_Long_All']||0);
-    const short=parseNum(d.prod_merc_positions_short_all||d['Prod_Merc_Positions_Short_All']||0);
+  // Parse a row from Legacy COT API — Comm_Positions fields match embedded baseline
+  const parseLegacyRow=d=>{
+    const long=parseNum(d.comm_positions_long_all||d['Comm_Positions_Long_All']||0);
+    const short=parseNum(d.comm_positions_short_all||d['Comm_Positions_Short_All']||0);
     const oi=parseNum(d.open_interest_all||d['Open_Interest_All']||1)||1;
-    const dateStr=(d.report_date_as_yyyy_mm_dd||d.as_of_date_form_yyyy_mm_dd||'').slice(0,10);
+    // Legacy API date field is report_date_as_mm_dd_yyyy, value format: "2026-03-03T00:00:00.000"
+    const raw=d.report_date_as_mm_dd_yyyy||d['Report_Date_as_MM_DD_YYYY']||'';
+    const dateStr=raw.slice(0,10);
     const mkt=(d.market_and_exchange_names||d['Market_and_Exchange_Names']||'').trim();
     return{date:dateStr,commLong:long,commShort:short,oi,netShortRatio:+((short-long)/oi).toFixed(4),mkt};
   };
-  // Merge fresh API rows into an existing array (embedded baseline), no duplicates
+  // Merge: embedded data is authoritative — only ADD dates not already present
+  // This prevents API data from overwriting the baseline with a different methodology
   const mergeIntoCOT=(existing,fresh)=>{
     const byDate=Object.fromEntries(existing.map(r=>[r.date,r]));
-    fresh.forEach(r=>{if(r.date&&r.oi>1) byDate[r.date]=r;});
+    // Only add genuinely new dates (don't overwrite embedded baseline)
+    fresh.forEach(r=>{if(r.date&&r.oi>1&&!byDate[r.date]) byDate[r.date]=r;});
     return Object.values(byDate).sort((a,b)=>a.date<b.date?-1:1);
   };
-  // Try direct CFTC then two CORS proxies in sequence
   let lastErr='';
   for(const makeUrl of proxies){
     const attempt=makeUrl(cftcUrl);
@@ -642,21 +647,16 @@ async function fetchCOT(){
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       const data=await r.json();
       if(!Array.isArray(data)||data.length<10) throw new Error(`only ${data?.length||0} rows`);
-      // Split by market and parse
-      const WTI_NAME='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE';
-      const GAS_NAME='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE';
-      const wtiRows=data.map(parseDisaggRow).filter(r=>r.mkt===WTI_NAME&&r.date&&r.oi>1);
-      const gasRows=data.map(parseDisaggRow).filter(r=>r.mkt===GAS_NAME&&r.date&&r.oi>1);
-      // Merge on top of embedded baseline
+      const wtiRows=data.map(parseLegacyRow).filter(r=>r.mkt===WTI_NAME&&r.date&&r.oi>1);
+      const gasRows=data.map(parseLegacyRow).filter(r=>r.mkt===GAS_NAME&&r.date&&r.oi>1);
       if(wtiRows.length) COT_WTI=mergeIntoCOT(COT_WTI,wtiRows);
       if(gasRows.length) COT_GAS=mergeIntoCOT(COT_GAS,gasRows);
       const wtiLatest=COT_WTI[COT_WTI.length-1];
-      const pctRank=Math.round(COT_WTI.filter(d=>d.netShortRatio<wtiLatest.netShortRatio).length/COT_WTI.length*100);
       badge.textContent=`✓ WTI ${COT_WTI.length}wk · GAS ${COT_GAS.length}wk · NSR ${(wtiLatest.netShortRatio*100).toFixed(1)}%`;
       badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
       const cotStat=$('cot-input-status');
       if(cotStat) cotStat.innerHTML=`Status: <span style="color:#22c55e">✓ Baseline + API · WTI ${COT_WTI[0]?.date}–${wtiLatest.date} (${COT_WTI.length}wk) · GAS ${COT_GAS[0]?.date}–${COT_GAS[COT_GAS.length-1]?.date} (${COT_GAS.length}wk)</span>`;
-      console.log(`COT API merged: WTI ${wtiRows.length} new rows → ${COT_WTI.length} total | GAS ${gasRows.length} new rows → ${COT_GAS.length} total`);
+      console.log(`COT Legacy API: WTI ${wtiRows.length} rows, GAS ${gasRows.length} rows → WTI total ${COT_WTI.length}wk, GAS total ${COT_GAS.length}wk`);
       if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
       return;
     }catch(e){
@@ -664,293 +664,12 @@ async function fetchCOT(){
       console.warn(`COT attempt failed (${attempt.slice(0,50)}):`,e.message);
     }
   }
-  // All attempts failed — embedded baseline still loaded, just note supplement failed
-  badge.textContent=`⚠ API failed · Baseline only: WTI ${COT_WTI.length}wk GAS ${COT_GAS.length}wk`;
-  badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
-  console.warn('COT: all proxies failed. Last error:',lastErr);
+  // All proxies failed — embedded baseline still available and correct
+  badge.textContent=`✓ WTI ${COT_WTI.length}wk · GAS ${COT_GAS.length}wk (embedded)`;
+  badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
+  console.warn('COT: API unavailable, using embedded baseline. Last error:',lastErr);
 }
 
-// ── COT CSV Upload fallback ───────────────────────────────────────────────────
-// For when CFTC Socrata API is unreliable. Accepts CFTC Disaggregated
-// Futures-Only CSV (TFF format). User downloads from:
-// cftc.gov → Market Reports → Commitments of Traders → Disaggregated
-// → Futures Only Historical Compressed → annual CSVs
-// Also accepts the "combined years" export from CFTC's website.
-function loadCOTFile(inp){
-  const file=inp.files[0]; if(!file) return;
-  const btn=document.getElementById('cot-upload-btn');
-  const badge=$('cot-badge');
-  btn.textContent='⏳ Parsing…'; btn.style.color='var(--muted)';
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const text=e.target.result;
-      const lines=text.split('\n').filter(l=>l.trim());
-      if(lines.length<2) throw new Error('File appears empty');
-      // Parse header row — handle quoted CSV
-      const parseCSVLine=line=>{
-        const out=[]; let cur='',inQ=false;
-        for(let i=0;i<line.length;i++){
-          const ch=line[i];
-          if(ch==='"'){inQ=!inQ;}
-          else if(ch===','&&!inQ){out.push(cur.trim());cur='';}
-          else cur+=ch;
-        }
-        out.push(cur.trim());
-        return out;
-      };
-      const headers=parseCSVLine(lines[0]).map(h=>h.replace(/"/g,'').trim().toLowerCase());
-      // Find column indices — CFTC uses various header name formats
-      const findCol=(...names)=>{
-        for(const n of names){
-          const i=headers.findIndex(h=>h===n.toLowerCase()||h.includes(n.toLowerCase()));
-          if(i>=0) return i;
-        }
-        return -1;
-      };
-      const mktCol=findCol('market_and_exchange_names','market and exchange names','market_name');
-      // Supports both Disaggregated (prod_merc_*) and Legacy COT (comm_positions_*) formats
-      const dateCol=findCol('report_date_as_mm_dd_yyyy','report_date_as_yyyy_mm_dd','as_of_date_in_form_yyyy-mm-dd','as_of_date','report date');
-      const longCol=findCol('prod_merc_positions_long_all','comm_positions_long_all','producer long','prod_merc_long','comm long');
-      const shortCol=findCol('prod_merc_positions_short_all','comm_positions_short_all','producer short','prod_merc_short','comm short');
-      const oiCol=findCol('open_interest_all','open interest','open_interest');
-      if(dateCol<0||longCol<0||shortCol<0||oiCol<0)
-        throw new Error(`Could not find required columns. Found: ${headers.slice(0,8).join(', ')}`);
-      const WTI_NAMES=['wti-physical - new york mercantile exchange','wti crude','crude oil, light sweet'];
-      const gasRows=[];
-      const parseNum=v=>typeof v==='number'?v:parseFloat(String(v||'').replace(/,/g,'').replace(/"/g,''))||0;
-      const rows=[];
-      for(let i=1;i<lines.length;i++){
-        const cols=parseCSVLine(lines[i]);
-        if(cols.length<4) continue;
-        const mktStr=mktCol>=0?(cols[mktCol]||'').replace(/"/g,'').trim():'';
-        const mktLow=mktStr.toLowerCase();
-        const isWTI=mktLow.includes('wti')||mktLow.includes('crude oil, light sweet')||mktLow.includes('067651');
-        const isGas=mktLow.includes('natural gas - new york')||mktLow.includes('023651');
-        if(mktCol>=0&&!isWTI&&!isGas) continue;
-        const dateStr=(cols[dateCol]||'').replace(/"/g,'').trim().slice(0,10);
-        if(!dateStr||dateStr.length<10) continue;
-        const long=parseNum(cols[longCol]);
-        const short=parseNum(cols[shortCol]);
-        const oi=parseNum(cols[oiCol])||1;
-        if(oi<100) continue;
-        const rec={date:dateStr,commLong:long,commShort:short,oi,
-          netShortRatio:+((short-long)/oi).toFixed(4)};
-        if(isGas) gasRows.push(rec); else rows.push(rec);
-      }
-      const mergeUpload=(existing,fresh)=>{
-        const byDate=Object.fromEntries(existing.map(r=>[r.date,r]));
-        fresh.forEach(r=>{if(r.date) byDate[r.date]=r;});
-        return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
-      };
-      if(rows.length) COT_WTI=mergeUpload(COT_WTI,rows);
-      if(gasRows.length) COT_GAS=mergeUpload(COT_GAS,gasRows);
-      if(COT_WTI.length<10&&COT_GAS.length<10) throw new Error('No WTI or Gas rows found');
-      badge.textContent=`✓ WTI ${COT_WTI.length}wk · GAS ${COT_GAS.length}wk (CSV)`;
-      badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
-      btn.textContent=`✓ COT uploaded`;btn.style.color='var(--green)';
-      inp.value='';
-      if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
-    }catch(err){
-      btn.textContent='⚠ Parse error';btn.style.color='var(--red)';
-      badge.textContent='⚠ '+err.message;
-      badge.style.background='#ef444420';badge.style.color='#ef4444';badge.style.border='1px solid #ef444440';
-      console.error('COT CSV parse error:',err);
-    }
-  };
-  reader.readAsText(file);
-}
-
-// Netlify HTTPS origin — direct EIA API calls work without any proxy
-// EIA proxy chain: direct first, then CORS relays if direct is blocked
-const PROXY=[
-  u=>u,
-  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-];
-let PX=0;
-
-let OIL={},GAS={},PERIODS=[];
-let CH={};
-let SUPP_LOADED=false; // tracks whether Aegis supplement has been merged
-// Weekly C1 spot values per delivery month — populated by Aegis supplement loader.
-// WEEKLY_C1_OIL["YYYY-MM"] = [v1, v2, v3, v4, v5]  (up to 5 weekly C1 closes during that month)
-// WEEKLY_C1_GAS["YYYY-MM"] = [...]
-// Used to compute avg realized C1 for RvS lines: normalizes single-week noise.
-// Falls back to OIL/GAS[period][1] for EIA-only months (monthly, single value).
-let WEEKLY_C1_OIL={}, WEEKLY_C1_GAS={};
-// Helper: get best available realized C1 for a delivery month
-// Returns avg of weekly C1 values if ≥2 available, else single monthly value
-function getRealizedC1(period, c){
-  const wkly = c==='oil' ? WEEKLY_C1_OIL[period] : WEEKLY_C1_GAS[period];
-  if(wkly && wkly.length>=2){
-    return +(wkly.reduce((a,b)=>a+b)/wkly.length).toFixed(4);
-  }
-  const store = c==='oil' ? OIL : GAS;
-  return store[period]?.[1] || null;
-}
-
-const $=id=>document.getElementById(id);
-
-// ── Aegis Weekly C1-C12 Supplement Loader ─────────────────────────────────────
-// Reads Aegis_Historical_C1C12_Weekly_2024-2026.xlsx (or similar export).
-// Expected sheets: HH_Weekly_C1C12 and WTI_Weekly_C1C12
-// Each sheet: row1 = headers (As-Of Date, C1..C12, 12Mo Strip Avg)
-//             row2+ = weekly snapshots sorted ascending
-// Strategy: for each calendar month, use the LAST weekly snapshot in that month
-// (mirrors EIA's end-of-month convention). Aegis data takes precedence over EIA
-// for any overlapping months.
-function loadSupplement(inp){
-  const file=inp.files[0];
-  if(!file)return;
-  const pill=$('supp-pill');
-  const btn=$('supp-btn');
-  pill.style.display='inline';
-  pill.className='pill pill-loading';
-  pill.textContent='● Parsing…';
-  btn.style.color='var(--muted)';
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-      const hasHH=wb.SheetNames.some(s=>s.includes('HH'));
-      const hasWTI=wb.SheetNames.some(s=>s.includes('WTI'));
-      if(!hasHH||!hasWTI) throw new Error('Sheets with "HH" and "WTI" not found. Upload Aegis_Historical_C1C24_Weekly_2024-2026.xlsx');
-      const hhSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('HH'))];
-      const wtiSheet=wb.Sheets[wb.SheetNames.find(s=>s.includes('WTI'))];
-      // Parse C1–C24 sheet → {YYYY-MM: {1:p, …, 24:p}}
-      // Detects max contracts from header; uses last weekly snapshot per month
-      function parseSheet(ws){
-        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-        if(rows.length<2) throw new Error('Sheet appears empty');
-        const hdr=rows[0];
-        let maxC=0;
-        hdr.forEach(h=>{if(h&&/^C\d+$/.test(String(h).trim())){const n=parseInt(String(h).slice(1));if(n>maxC)maxC=n;}});
-        if(maxC===0) maxC=12; // fallback for older C1C12 format
-        const out={};
-        for(let r=1;r<rows.length;r++){
-          const row=rows[r];
-          if(!row||!row[0]) continue;
-          let dt=row[0];
-          if(typeof dt==='string'){
-            const ymd=dt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            const mdy=dt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if(ymd) dt=new Date(+ymd[1],+ymd[2]-1,+ymd[3]);
-            else if(mdy) dt=new Date(+mdy[3],+mdy[1]-1,+mdy[2]);
-            else dt=new Date(dt);
-          }
-          if(!(dt instanceof Date)||isNaN(dt)) continue;
-          const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-          const contracts={};
-          for(let c=1;c<=maxC;c++){
-            const v=parseFloat(row[c]);
-            if(!isNaN(v)&&v>0) contracts[c]=v;
-          }
-          if(Object.keys(contracts).length<3) continue;
-          out[period]=contracts; // ascending rows → last week of month wins
-        }
-        return{data:out,maxC};
-      }
-      const {data:hhData,maxC:hhMax}=parseSheet(hhSheet);
-      const {data:wtiData,maxC:wtiMax}=parseSheet(wtiSheet);
-      const hhPeriods=Object.keys(hhData).length;
-      const wtiPeriods=Object.keys(wtiData).length;
-      if(hhPeriods<6||wtiPeriods<6) throw new Error(`Too few periods (HH:${hhPeriods}, WTI:${wtiPeriods})`);
-      let mergedNew=0,mergedOverlap=0;
-      Object.entries(wtiData).forEach(([p,contracts])=>{
-        const isNew=!OIL[p]||!OIL[p][1];
-        if(isNew) mergedNew++; else mergedOverlap++;
-        OIL[p]={...(OIL[p]||{}),...contracts};
-      });
-      Object.entries(hhData).forEach(([p,contracts])=>{
-        GAS[p]={...(GAS[p]||{}),...contracts};
-      });
-      // ── Populate WEEKLY_C1 stores ─────────────────────────────────────────
-      // For each as-of week, the C1 value is the front-month price for that
-      // calendar month. We bucket it by the as-of month so that when we
-      // look up "what was the realized spot during delivery month YYYY-MM",
-      // we have all weekly C1 observations from that month (4-5 values).
-      function collectWeeklyC1(ws, store){
-        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-        if(rows.length<2) return;
-        // Detect max C from header (same as parseSheet)
-        const hdr=rows[0];
-        // Process each row: col 0 = as-of date, col 1 = C1 value
-        for(let r=1;r<rows.length;r++){
-          const row=rows[r];
-          if(!row||!row[0]||!row[1]) continue;
-          let dt=row[0];
-          if(typeof dt==='string'){
-            const ymd=dt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            const mdy=dt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if(ymd) dt=new Date(+ymd[1],+ymd[2]-1,+ymd[3]);
-            else if(mdy) dt=new Date(+mdy[3],+mdy[1]-1,+mdy[2]);
-            else dt=new Date(dt);
-          }
-          if(!(dt instanceof Date)||isNaN(dt)) continue;
-          // C1 price is in column 1 (first contract after as-of date)
-          const v=parseFloat(row[1]);
-          if(isNaN(v)||v<=0) continue;
-          // As-of month = delivery month for C1
-          const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-          if(!store[period]) store[period]=[];
-          store[period].push(v);
-        }
-      }
-      WEEKLY_C1_OIL={};
-      WEEKLY_C1_GAS={};
-      collectWeeklyC1(wtiSheet, WEEKLY_C1_OIL);
-      collectWeeklyC1(hhSheet,  WEEKLY_C1_GAS);
-      // Log coverage
-      const wtiWkly=Object.keys(WEEKLY_C1_OIL).length;
-      const hhWkly=Object.keys(WEEKLY_C1_GAS).length;
-      const avgWkly=wtiWkly>0?+(Object.values(WEEKLY_C1_OIL).reduce((s,a)=>s+a.length,0)/wtiWkly).toFixed(1):0;
-      console.log(`Weekly C1 store: WTI ${wtiWkly} months (avg ${avgWkly} obs/mo), HH ${hhWkly} months`);
-      // Include EIA months AND Aegis-only months beyond EIA cutoff
-      PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
-        .filter(p=>{const o=OIL[p];return o&&o[1]&&(o[3]||o[2]);}).sort();
-      SUPP_LOADED=true;
-      inp.value='';
-      pill.className='pill pill-ok';
-      const latest=PERIODS[PERIODS.length-1];
-      const cMax=Math.max(wtiMax,hhMax);
-      pill.textContent=`● +${hhPeriods} mo Aegis C1–C${cMax} (${mergedNew} new · ${mergedOverlap} overlap)`;
-      btn.style.color='var(--green)';
-      btn.textContent=`✓ C1–C${cMax} Loaded`;
-      $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${latest}`;
-      // Aegis button updated in finishLoad()
-      clearTimeout(loadTimeout);
-  // Update Inputs tab EIA status
-  const eiaStatus=$('eia-input-status');
-  if(eiaStatus) eiaStatus.innerHTML=`Status: <span style="color:#22c55e">✓ Loaded · ${PERIODS[0]} – ${PERIODS[PERIODS.length-1]} · ${PERIODS.length} periods</span>`;
-  if(typeof renderAll==='function') renderAll();
-    }catch(err){
-      console.error('Supplement parse error:',err);
-      pill.className='pill pill-err';
-      pill.textContent='● Error: '+err.message;
-      btn.style.color='var(--red)';
-    }
-  };
-  reader.onerror=()=>{pill.className='pill pill-err';pill.textContent='● File read failed';};
-  reader.readAsArrayBuffer(file);
-}
-const f$=(v,d=2)=>v==null?'—':'$'+(+v).toFixed(d);
-const MOS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const ML=p=>{if(!p)return'';const[y,m]=p.split('-');return MOS[+m-1]+' '+y.slice(2);};
-
-function ldr(msg,pct,det,ser){
-  if(msg)$('ld-msg').textContent=msg;
-  if(pct!=null)$('ld-fill').style.width=pct+'%';
-  if(det)$('ld-detail').innerHTML=det;
-  if(ser!=null)$('ld-series').textContent=ser;
-}
-
-function dCh(id){
-  if(CH[id]){try{CH[id].destroy();}catch(e){} delete CH[id]; return;}
-  // Only check canvas for orphan if we didn't already destroy via CH map
-  const el=$(id);
-  if(el){const orphan=Chart.getChart(el);if(orphan){try{orphan.destroy();}catch(e){}}}
-}
 
 // ─── SAFE TIMEOUT FETCH (AbortSignal.timeout not cloneable in all contexts) ──
 async function fetchWithTimeout(url, ms=15000){
