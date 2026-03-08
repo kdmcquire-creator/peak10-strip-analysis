@@ -270,7 +270,7 @@ td.L{text-align:left;color:var(--sub)}
       </div>
       <div class="card">
         <div class="ct">ERROR DISTRIBUTION — <span id="rlz-hist-label">ALL TENORS</span></div>
-        <div class="cs">Distribution of (realized − strip) / strip × 100 for the selected tenor. X-axis = % deviation. Left of zero = strip overestimated (hedge was valuable). Source: EIA monthly for C1–C12, Aegis weekly supplement for C13–C24.</div>
+        <div class="cs">Distribution of (strip − realized) / realized × 100 for the selected tenor. Positive = strip overestimated realized price (hedge captured premium). Negative = strip underestimated (market came in higher). Source: EIA monthly for C1–C12, Aegis weekly for C13–C24.</div>
         <div style="position:relative"><canvas id="ch-rlz-hist" height="200"></canvas></div>
       </div>
     </div>
@@ -1241,10 +1241,13 @@ function renderTimeMachine(){
     ${diff!=null?diff>0?`<span class="lo">Prices fell ${Math.abs(diff).toFixed(2)} since then — hedging in ${ML(selP)} would have been a better entry.</span>`:`<span class="hi">Prices rose ${Math.abs(diff).toFixed(2)} since then — today is a better entry than ${ML(selP)}.</span>`:''}`;
 
   dCh('tm-c');dCh('tm-h');dCh('tm-p');
-  const labs=Array.from({length:12},(_,i)=>`C${i+1}`);
+  // Use 24 contracts to show Aegis C13-C24 for recent periods; EIA-only periods show nulls for C13+
+  const fwdN=24;
+  const sArr24=stripArr(selP,c,fwdN), cArr24=stripArr(lat,c,fwdN);
+  const labs=Array.from({length:fwdN},(_,i)=>`C${i+1}`);
   CH['tm-c']=new Chart($('ch-tm-curve').getContext('2d'),{type:'bar',data:{labels:labs,datasets:[
-    {label:`${ML(selP)}`,data:sArr,backgroundColor:col+'88',borderColor:col,borderWidth:1,borderRadius:3},
-    {label:`Today (${ML(lat)})`,data:cArr,type:'line',borderColor:'#94a3b8',borderWidth:2,pointRadius:2,fill:false,tension:0.2}
+    {label:`${ML(selP)}`,data:sArr24,backgroundColor:col+'88',borderColor:col,borderWidth:1,borderRadius:3},
+    {label:`Today (${ML(lat)})`,data:cArr24,type:'line',borderColor:'#94a3b8',borderWidth:2,pointRadius:2,fill:false,tension:0.2}
   ]},options:{...bO,scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>'$'+v}}}}});
 
   const hV=aV.filter(v=>v);const mn=Math.min(...hV),mx=Math.max(...hV);
@@ -1267,8 +1270,9 @@ function renderTimeMachine(){
     scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>(v>=0?'+':'')+'$'+v}}}}});
 
   $('tm-thead').innerHTML=`<th class="L">Contract</th><th>${ML(selP)}</th><th>Today</th><th>Δ</th><th>Δ%</th>`;
-  $('tm-tbody').innerHTML=sArr.map((v,i)=>{
-    const cur=cArr[i],d=cur&&v?+(cur-v).toFixed(2):null,pD=v&&cur?(cur/v-1)*100:null;
+  $('tm-tbody').innerHTML=sArr24.map((v,i)=>{
+    const cur=cArr24[i],d=cur&&v?+(cur-v).toFixed(2):null,pD=v&&cur?(cur/v-1)*100:null;
+    if(v==null&&cur==null) return '';
     return`<tr><td class="L">C${i+1}</td><td style="color:${col}">${v!=null?'$'+v.toFixed(2):'—'}</td><td>${cur!=null?'$'+cur.toFixed(2):'—'}</td>
       <td style="color:${d==null?'inherit':d>0?'#22c55e':'#ef4444'}">${d!=null?(d>0?'+':'')+d.toFixed(2):'—'}</td>
       <td style="color:${pD==null?'inherit':pD>0?'#22c55e':'#ef4444'}">${pD!=null?(pD>0?'+':'')+pD.toFixed(1)+'%':'—'}</td></tr>`;
@@ -1627,7 +1631,7 @@ function getRlzErrors(c,fromYear,regFilter){
       const d=new Date(yr,mo-1+(n-1),1);
       const delP=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       const realized=getRealizedC1(delP,c); if(!realized||realized<=0) continue;
-      errors.push({p,n,predicted,realized,error:realized-predicted,pctErr:(realized-predicted)/predicted*100,regime});
+      errors.push({p,n,predicted,realized,error:realized-predicted,pctErr:(predicted-realized)/realized*100,regime});
     }
   });
   return errors;
@@ -1656,15 +1660,15 @@ function renderRealization(){
   $('rlz-stats').innerHTML=`
     <div class="stat"><div class="sl">Observations</div><div class="sv" style="font-size:16px">${n.toLocaleString()}</div><div class="ss">hedge-month/tenor pairs</div></div>
     <div class="stat"><div class="sl">Mean Error</div><div class="sv" style="color:${meanErr>0?'#22c55e':'#ef4444'}">${meanErr>0?'+':''}${meanErr.toFixed(2)}</div><div class="ss">realized − predicted ${unit}</div></div>
-    <div class="stat"><div class="sl">Mean Error %</div><div class="sv" style="color:${meanPct>0?'#22c55e':'#ef4444'}">${meanPct>0?'+':''}${meanPct.toFixed(1)}%</div><div class="ss">(realized−strip)/strip</div></div>
+    <div class="stat"><div class="sl">Mean Error %</div><div class="sv" style="color:${meanPct>0?'#22c55e':'#ef4444'}">${meanPct>0?'+':''}${meanPct.toFixed(1)}%</div><div class="ss">(strip−realized)/realized</div></div>
     <div class="stat"><div class="sl">Strip Overestimated</div><div class="sv" style="color:#ef4444">${(overEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
     <div class="stat"><div class="sl">Strip Underestimated</div><div class="sv" style="color:#22c55e">${(underEst/n*100).toFixed(0)}%</div><div class="ss">of observations</div></div>
     <div class="stat"><div class="sl">Max Tenor</div><div class="sv">C${maxT}</div><div class="ss">upload Aegis for C13–C24</div></div>`;
 
-  const dir=meanErr<0?'overestimated realized prices':'underestimated realized prices';
-  const action=meanErr<0
-    ?`Strip was <strong style="color:#22c55e">pessimistic</strong> about future prices. Locking in the strip captured a real forward premium — hedging paid off on average.`
-    :`Strip was <strong style="color:#ef4444">optimistic</strong> about future prices. Realized prices came in higher — unhedged positions captured more value.`;
+  const dir=meanPct>0?'overestimated realized prices (strip > actual)':'underestimated realized prices (strip < actual)';
+  const action=meanPct>0
+    ?`Strip was <strong style="color:#22c55e">optimistic</strong> — it priced above what actually realized. Locking in the strip captured a real forward premium — hedging paid off on average.`
+    :`Strip was <strong style="color:#ef4444">pessimistic</strong> — realized prices came in above the strip. Unhedged positions captured more value.`;
   $('rlz-insight').innerHTML=`<strong>Key finding (${RLZ_ERA==='all'?'2010+':RLZ_ERA==='2015'?'2015+':'Post-COVID'} ${RLZ_REG!=='all'?'· '+RLZ_REG:''}):</strong> Strip historically ${dir} by avg <strong>${Math.abs(meanErr).toFixed(2)}${unit} (${Math.abs(meanPct).toFixed(1)}%)</strong> across C1–C${maxT}. ${action}`;
 
   // ── Chart 1: avg error by tenor C1–maxT ──────────────────────────────────
@@ -1758,6 +1762,8 @@ function renderRealization(){
       scales:{...bO.scales,x:{...bO.scales.x,ticks:{...bO.scales.x.ticks,maxRotation:55,font:{size:8}}}}}});
 
   // ── Chart 4: avg error by regime × all 4 tenor groups (always show all) ───
+  // Always use unfiltered errs so both regimes show regardless of RLZ_REG filter
+  const allErrs=RLZ_REG==='all'?errs:getRlzErrors(c,fromYear,'all');
   const regimes=['contango','backwardated'];
   const tenorGroups=['C1–C6','C7–C12','C13–C18','C19–C24'];
   const tenorRanges=[[1,6],[7,12],[13,18],[19,24]];
@@ -1766,7 +1772,7 @@ function renderRealization(){
     datasets:regimes.map((reg,ri)=>({
       label:reg.charAt(0).toUpperCase()+reg.slice(1),
       data:tenorRanges.map(([lo,hi])=>{
-        const te=errs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);
+        const te=allErrs.filter(e=>e.regime===reg&&e.n>=lo&&e.n<=hi);
         return te.length?+(te.reduce((s,e)=>s+e.error,0)/te.length).toFixed(3):null;
       }),
       backgroundColor:ri===0?'#f59e0b66':'#06b6d466',
@@ -2147,8 +2153,8 @@ function renderRegime(){
       scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>v.toFixed(1)+'%'}}}}});
 
   // ── Chart 5: COT commercial net short ratio (oil or gas) ────────────────
-  const activeCOT=(C==='gas'&&COT_GAS.length>4)?COT_GAS:COT_WTI;
-  const cotLabel=C==='gas'?'Nat Gas Commercial NSR':'WTI Commercial NSR';
+  const activeCOT=(c==='gas'&&COT_GAS.length>4)?COT_GAS:COT_WTI;
+  const cotLabel=c==='gas'?'Nat Gas Commercial NSR':'WTI Commercial NSR';
   if(activeCOT.length>4){
     const allNSRVals=activeCOT.map(d=>d.netShortRatio);
     const cotLatest=activeCOT[activeCOT.length-1];
