@@ -51,6 +51,7 @@ html{scroll-behavior:smooth}html,body{height:100%;background:var(--bg);color:var
 .insight strong{color:var(--text)}
 .hi{color:#22c55e;font-weight:700}.lo{color:#ef4444;font-weight:700}.am{color:#f59e0b;font-weight:700}
 .ctrl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-top:10px}
+.sticky-zone .ctrl-row{padding-top:2px;margin-bottom:4px}
 .cg{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:3px}
 .cb{padding:5px 12px;border:none;background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:var(--mono)}
 .cb.oil{background:var(--oil);color:#000}.cb.gas{background:var(--gas);color:#000}.cb.on{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
@@ -78,13 +79,13 @@ td.L{text-align:left;color:var(--sub)}
 /* ── Sticky freeze zones ─────────────────────────────────────────────────── */
 .sticky-zone{
   position:sticky;
-  top:107px;
+  top:var(--sz-top,110px);
   z-index:48;
   background:var(--bg);
-  padding:6px 24px 10px;
-  margin:0 -24px 12px;
+  padding:4px 0 10px;
+  margin-bottom:10px;
   border-bottom:1px solid var(--border2);
-  box-shadow:0 4px 16px -2px rgba(0,0,0,.55);
+  box-shadow:0 6px 18px -2px rgba(0,0,0,.6);
 }
 
 /* ── Zoom reset buttons ───────────────────────────────────────────────────── */
@@ -1132,7 +1133,18 @@ async function loadData(){
   finishLoad(true);
 }
 
+
+// ── Sticky-zone top: measure header + tab bar actual height ─────────────────
+function setStickyTop(){
+  const hdr=document.querySelector('.header');
+  const tabWrap=document.querySelector('#main-content>div[style*="sticky"]');
+  if(!hdr||!tabWrap)return;
+  const t=hdr.getBoundingClientRect().height+tabWrap.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--sz-top',Math.ceil(t)+'px');
+}
+window.addEventListener('resize',setStickyTop);
 function finishLoad(fromAPI){
+  setStickyTop();
   // ── Merge Aegis C1-C26 on top of EIA ────────────────────────────────────
   let aegisMergedNew=0,aegisMergedOverlap=0;
   Object.entries(AEGIS_EMBEDDED.oil||{}).forEach(([p,contracts])=>{
