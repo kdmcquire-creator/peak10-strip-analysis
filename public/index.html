@@ -351,10 +351,67 @@ const KEY='clNi93nfcGdrKTdffUjRK2U6R8luhRZbYcEydnGT';
 let OVX_MONTHLY={};  // YYYY-MM → monthly avg OVX close
 let COT_WTI=[];      // [{date:'YYYY-MM-DD', netShortRatio, prodLong, prodShort, oi}, ...]
 
-// ── OVX: file upload handler (CBOE CDN has CORS restrictions on hosted pages)
+// ── Helper: digest daily OVX values into OVX_MONTHLY and refresh UI ──────────
+function digestOVXDays(dailyMap){
+  // dailyMap: { 'YYYY-MM-DD': value, ... }
+  const monthly={};
+  Object.entries(dailyMap).forEach(([dateStr,v])=>{
+    const period=dateStr.slice(0,7);
+    if(!monthly[period]) monthly[period]=[];
+    monthly[period].push(v);
+  });
+  Object.entries(monthly).forEach(([p,vals])=>{
+    OVX_MONTHLY[p]=+(vals.reduce((a,b)=>a+b)/vals.length).toFixed(2);
+  });
+  const months=Object.keys(OVX_MONTHLY).sort();
+  const badge=$('ovx-badge');
+  if(badge&&months.length){
+    badge.textContent=`✓ ${months.length} mo · ${months[0]} – ${months[months.length-1]}`;
+    badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
+  }
+  if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
+  return months.length;
+}
+
+// ── OVX AUTO-FETCH: Yahoo Finance ^OVX (daily, 15y) ─────────────────────────
+// Yahoo Finance is CORS-permissive; no API key required.
+// Falls back to upload button if fetch fails.
+async function fetchOVX(){
+  const badge=$('ovx-badge');
+  const btn=$('ovx-btn');
+  badge.textContent='⏳ Fetching OVX…';
+  try{
+    // Yahoo Finance chart API — 15y of daily ^OVX closes
+    const url='https://query1.finance.yahoo.com/v8/finance/chart/%5EOVX?interval=1d&range=15y';
+    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error(`Yahoo HTTP ${r.status}`);
+    const j=await r.json();
+    const ts=j?.chart?.result?.[0]?.timestamp;
+    const closes=j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+    if(!ts||!closes||ts.length===0) throw new Error('unexpected Yahoo response shape');
+    const daily={};
+    ts.forEach((t,i)=>{
+      const v=closes[i];
+      if(v==null||isNaN(v)||v<=0) return;
+      const d=new Date(t*1000);
+      const dateStr=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      daily[dateStr]=v;
+    });
+    const n=digestOVXDays(daily);
+    if(n===0) throw new Error('no valid data points after parsing');
+    btn.textContent=`✓ OVX auto`;btn.style.color='var(--green)';
+    console.log(`OVX: fetched ${Object.keys(daily).length} days → ${n} months via Yahoo Finance`);
+  }catch(err){
+    console.warn('OVX auto-fetch failed:',err.message,'— upload button available as fallback');
+    badge.textContent='⬆ Auto-fetch failed · Upload CSV';
+    badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
+  }
+}
+
+// ── OVX: file upload handler (fallback if Yahoo fetch fails) ─────────────────
 // Accepts both:
-//   Full history format: DATE,OVX  (from cdn.cboe.com/api/global/us_indices/daily_prices/OVX_History.csv)
-//   Dashboard export:   Date,Open,High,Low,Close  (from cboe.com index dashboard download)
+//   Full history format: DATE,OVX  (from cboe.com OVX Historical Data)
+//   Dashboard export:   Date,Open,High,Low,Close
 function loadOVXFile(input){
   const file=input.files[0]; if(!file) return;
   const btn=$('ovx-btn');
@@ -393,13 +450,10 @@ function loadOVXFile(input){
         OVX_MONTHLY[p]=+(vals.reduce((a,b)=>a+b)/vals.length).toFixed(2);
       });
       const months=Object.keys(OVX_MONTHLY).sort();
-      if(months.length>0){
-        btn.textContent=`✓ OVX ${months.length}mo`;
+      const n=digestOVXDays(monthly);
+      if(n>0){
+        btn.textContent=`✓ OVX ${n}mo (upload)`;
         btn.style.color='var(--green)';
-        // Update badge
-        const badge=$('ovx-badge');
-        if(badge){badge.textContent=`✓ ${months.length} mo · ${months[0]} – ${months[months.length-1]}`;badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';}
-        if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
       } else {
         btn.textContent='⚠ Parse error'; btn.style.color='var(--red)';
       }
@@ -411,53 +465,64 @@ function loadOVXFile(input){
   reader.readAsText(file);
 }
 
-// Fetch COT Disaggregated Futures-Only for WTI from CFTC Socrata API (no key required)
+// ── COT AUTO-FETCH: CFTC Socrata with CORS proxy fallback chain ──────────────
+// Tries direct CFTC first (works from localhost), then two CORS proxies.
+// If all fail, badge instructs user to upload CSV. Upload always available.
 async function fetchCOT(){
   const badge=$('cot-badge');
   const WTI_NAME='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE';
-  // Use $limit=5000 to ensure full history; order ASC for chronological
-  const url=`https://publicreporting.cftc.gov/resource/72hh-3qpy.json?$where=market_and_exchange_names=%27${encodeURIComponent(WTI_NAME)}%27&$order=report_date_as_yyyy_mm_dd%20ASC&$limit=5000`;
-  try{
-    const r=await fetch(url);
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data=await r.json();
+  const cftcUrl=`https://publicreporting.cftc.gov/resource/72hh-3qpy.json?$where=market_and_exchange_names=%27${encodeURIComponent(WTI_NAME)}%27&$order=report_date_as_yyyy_mm_dd%20ASC&$limit=5000`;
+  // CORS proxy chain — try each in order until one works
+  const proxies=[
+    u=>u,  // direct (works from localhost / some hosts)
+    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ];
+  const url=proxies[0](cftcUrl); // reassigned per attempt below
+  const parseNum=v=>{
+    if(v==null||v===''||v===undefined) return 0;
+    if(typeof v==='number') return v;
+    return parseFloat(String(v).replace(/,/g,''))||0;
+  };
+  const digestCOT=data=>{
     if(!Array.isArray(data)||data.length===0) throw new Error('empty response');
-    // CFTC Socrata may return numbers as strings with commas (e.g. "386,821")
-    // parseNum handles both "386821", "386,821", and actual JS numbers
-    const parseNum=v=>{
-      if(v==null||v===''||v===undefined) return 0;
-      if(typeof v==='number') return v;
-      return parseFloat(String(v).replace(/,/g,''))||0;
-    };
-    // Log first record keys for debugging if fields return 0
-    if(data.length>0){
-      const sample=data[0];
-      const longVal=parseNum(sample.prod_merc_positions_long_all||sample['Prod_Merc_Positions_Long_All']);
-      if(longVal===0){
-        console.warn('COT: prod_merc_positions_long_all returned 0. Sample record keys:',Object.keys(sample).slice(0,20));
-      }
-    }
-    COT_WTI=data.map(d=>{
-      // Try both snake_case and Title_Case field names
+    const rows=data.map(d=>{
       const long=parseNum(d.prod_merc_positions_long_all||d['Prod_Merc_Positions_Long_All']||d.posi_prod_merc_long_all||0);
       const short=parseNum(d.prod_merc_positions_short_all||d['Prod_Merc_Positions_Short_All']||d.posi_prod_merc_short_all||0);
       const oi=parseNum(d.open_interest_all||d['Open_Interest_All']||d.open_interest||1)||1;
       const dateStr=(d.report_date_as_yyyy_mm_dd||d['As_of_Date_Form_YYYY-MM-DD']||d.as_of_date_form_yyyy_mm_dd||'').slice(0,10);
       return{date:dateStr,prodLong:long,prodShort:short,oi,netShortRatio:+((short-long)/oi).toFixed(4)};
     }).filter(d=>d.date&&d.oi>1);
-    if(COT_WTI.length>0){
+    if(rows.length<10) throw new Error(`only ${rows.length} valid rows`);
+    return rows;
+  };
+  // Try direct CFTC then two CORS proxies in sequence
+  let lastErr='';
+  for(const makeUrl of proxies){
+    const attempt=makeUrl(cftcUrl);
+    try{
+      badge.textContent=`⏳ Fetching COT${attempt===cftcUrl?'':' (proxy)'}…`;
+      const r=await fetch(attempt,{signal:AbortSignal.timeout(12000)});
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data=await r.json();
+      COT_WTI=digestCOT(data);
       const latest=COT_WTI[COT_WTI.length-1];
       const allNSR=COT_WTI.map(d=>d.netShortRatio);
       const pctRank=Math.round(COT_WTI.filter(d=>d.netShortRatio<latest.netShortRatio).length/COT_WTI.length*100);
       badge.textContent=`✓ ${COT_WTI.length} wks · NSR ${(latest.netShortRatio*100).toFixed(1)}% · ${pctRank}th pct`;
       badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
+      console.log(`COT: ${COT_WTI.length} weeks via ${attempt===cftcUrl?'direct CFTC':attempt.slice(0,40)}`);
+      if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
+      return;
+    }catch(e){
+      lastErr=e.message;
+      console.warn(`COT attempt failed (${attempt.slice(0,50)}):`,e.message);
     }
-    if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
-  }catch(e){
-    console.warn('COT fetch failed:',e.message);
-    badge.textContent='⚠ Unavailable — CORS or network issue';
-    badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
   }
+  // All attempts failed — prompt upload
+  badge.textContent='⚠ Auto-fetch failed — use ⬆ Upload COT CSV';
+  badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
+  console.warn('COT: all proxies failed. Last error:',lastErr);
 }
 
 // ── COT CSV Upload fallback ───────────────────────────────────────────────────
@@ -1920,8 +1985,9 @@ function renderRegime(){
 
 // ─── BOOT ────────────────────────────────────────────────────
 loadData();
-// OVX: upload via header button (CBOE CDN blocked cross-origin from hosted pages)
-// COT: fetched live from CFTC public API
+// OVX: auto-fetch from Yahoo Finance; falls back to upload button on CORS failure
+fetchOVX();
+// COT: auto-fetch direct CFTC then two CORS proxies; falls back to upload button
 fetchCOT();
 </script>
 </body>
