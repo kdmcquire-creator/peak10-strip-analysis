@@ -573,10 +573,18 @@ function loadOVXFile(input){
         OVX_MONTHLY[p]=+(vals.reduce((a,b)=>a+b)/vals.length).toFixed(2);
       });
       const months=Object.keys(OVX_MONTHLY).sort();
-      const n=digestOVXDays(monthly);
+      const n=months.length;
       if(n>0){
         btn.textContent=`✓ OVX ${n}mo (upload)`;
         btn.style.color='var(--green)';
+        // Update badge
+        const badge=$('ovx-badge');
+        if(badge){badge.textContent=`✓ ${n} mo · ${months[0]} – ${months[months.length-1]}`;
+          badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';}
+        // Update inputs tab status
+        const ovxStat=$('ovx-input-status');
+        if(ovxStat) ovxStat.innerHTML=`Status: <span style="color:#22c55e">✓ Loaded · ${months[0]} – ${months[months.length-1]} · ${n} months</span>`;
+        if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
       } else {
         btn.textContent='⚠ Parse error'; btn.style.color='var(--red)';
       }
@@ -937,7 +945,12 @@ function ldr(msg,pct,det,ser){
   if(ser!=null)$('ld-series').textContent=ser;
 }
 
-function dCh(id){if(CH[id]){CH[id].destroy();delete CH[id];}}
+function dCh(id){
+  if(CH[id]){try{CH[id].destroy();}catch(e){} delete CH[id]; return;}
+  // Only check canvas for orphan if we didn't already destroy via CH map
+  const el=$(id);
+  if(el){const orphan=Chart.getChart(el);if(orphan){try{orphan.destroy();}catch(e){}}}
+}
 
 // ─── SAFE TIMEOUT FETCH (AbortSignal.timeout not cloneable in all contexts) ──
 async function fetchWithTimeout(url, ms=15000){
@@ -1141,11 +1154,10 @@ function retryLoad(){
 function renderAll(){
   renderOverview();renderTimeMachine();renderPercentile();
   renderSeasonality();renderDecay();renderScorecard();
-  // Tabs 7 & 8: lazy on first load, but must refresh when supplement extends PERIODS
-  if(SUPP_LOADED){
-    if(typeof renderRealization==='function') renderRealization();
-    if(typeof renderRegime==='function') renderRegime();
-  }
+  // Tab 7: lazy - but refresh if Aegis supplement extended PERIODS
+  if(SUPP_LOADED&&typeof renderRealization==='function') renderRealization();
+  // Tab 8 (Regime): purely lazy - only renders when tab is active (never on hidden canvas)
+  // When user switches to regime tab, switchTab() calls renderRegime() on visible canvas
 }
 
 // ─── STRIP MATH ────────────────────────────────────────────
@@ -1862,7 +1874,9 @@ function computeSignal(p,c,allVals,allAvgsSorted){
 }
 
 function renderRegime(){
-  if(!PERIODS.length) return;
+  console.log('[REGIME] renderRegime called, PERIODS:', PERIODS.length, 'COT_WTI:', COT_WTI.length, 'OVX keys:', Object.keys(OVX_MONTHLY).length);
+  if(!PERIODS.length) { console.log('[REGIME] early return - no PERIODS'); return; }
+  try{
   const c=RG_C;
   const unit=c==='oil'?'/bbl':'/MMbtu'; const col=c==='oil'?'#f59e0b':'#06b6d4';
   ['ch-rg-signal','ch-rg-fwd','ch-rg-vol','ch-rg-revert','ch-rg-ovx','ch-rg-cot','ch-rg-quad'].forEach(id=>dCh(id));
@@ -2106,6 +2120,7 @@ function renderRegime(){
 
   // ── Chart 3: OVX history ─────────────────────────────────────────────────
   const ovxPeriods=PERIODS.filter(p=>OVX_MONTHLY[p]!=null);
+  console.log('[REGIME] ovxPeriods:', ovxPeriods.length, 'activeCOT:', (COT_WTI.length||0), 'COT_GAS:', (COT_GAS.length||0));
   // Show upload prompt when no OVX data loaded
   const ovxEl=$('ch-rg-ovx');
   if(ovxPeriods.length===0&&ovxEl){
@@ -2119,7 +2134,7 @@ function renderRegime(){
   if(ovxPeriods.length>6){
     const allOVX=ovxPeriods.map(p=>OVX_MONTHLY[p]);
     const curOVXPct=latOVX?pctile(latOVX,allOVX):null;
-    CH['ch-rg-ovx']=new Chart($('ch-rg-ovx'),{type:'line',data:{
+    console.log('[REGIME] creating OVX chart'); CH['ch-rg-ovx']=new Chart($('ch-rg-ovx'),{type:'line',data:{
       labels:ovxPeriods,
       datasets:[{label:'OVX Monthly Avg',data:allOVX,borderColor:'#a78bfa',borderWidth:1.5,
         pointRadius:0,fill:true,backgroundColor:'#a78bfa18',tension:0.3}]},
@@ -2142,7 +2157,7 @@ function renderRegime(){
   const curVolNow=volSeries[volSeries.length-1]?.v;
   const allVolValsNow=volSeries.map(d=>d.v);
   const volPctNow=curVolNow?pctile(curVolNow,allVolValsNow):null;
-  CH['ch-rg-vol']=new Chart($('ch-rg-vol'),{type:'line',data:{
+  console.log('[REGIME] creating VOL chart'); CH['ch-rg-vol']=new Chart($('ch-rg-vol'),{type:'line',data:{
     labels:volSeries.map(d=>d.p),
     datasets:[{label:'6-mo strip vol proxy',data:volSeries.map(d=>d.v),
       borderColor:'#64748b',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#64748b18',tension:0.3}]},
@@ -2161,7 +2176,7 @@ function renderRegime(){
     const cotPct=pctile(cotLatest.netShortRatio,allNSRVals);
     const step=Math.max(1,Math.floor(activeCOT.length/200));
     const cotSampled=activeCOT.filter((_,i)=>i%step===0||i===activeCOT.length-1);
-    CH['ch-rg-cot']=new Chart($('ch-rg-cot'),{type:'line',data:{
+    console.log('[REGIME] creating COT chart'); CH['ch-rg-cot']=new Chart($('ch-rg-cot'),{type:'line',data:{
       labels:cotSampled.map(d=>d.date.slice(0,7)),
       datasets:[{label:cotLabel,data:cotSampled.map(d=>+(d.netShortRatio*100).toFixed(2)),
         borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#06b6d418',tension:0.2}]},
@@ -2226,7 +2241,7 @@ function renderRegime(){
   const cBkt=buckets[curBucket];
   const cBktTotal=bTotals[curBucket];
   const cBktFellPct=+(cBkt.lower/cBktTotal*100).toFixed(0);
-  CH['ch-rg-revert']=new Chart($('ch-rg-revert'),{type:'bar',data:{
+  console.log('[REGIME] creating REVERT chart'); CH['ch-rg-revert']=new Chart($('ch-rg-revert'),{type:'bar',data:{
     labels:buckets.map(b=>b.range),
     datasets:[
       {label:`Strip fell ${revertFwd}mo later`,data:buckets.map((b,i)=>+(b.lower/bTotals[i]*100).toFixed(0)),backgroundColor:buckets.map((_,i)=>i===curBucket?'#22c55ecc':'#22c55e44'),borderColor:'#22c55e',borderWidth:1,borderRadius:2,stack:'s'},
@@ -2248,6 +2263,10 @@ function renderRegime(){
         y:{...bO.scales.y,max:100,stacked:true,ticks:{...bO.scales.y.ticks,callback:v=>v+'%'}},
         x:{...bO.scales.x,stacked:true}}},
     });
+  }catch(err){
+    console.error('[REGIME] renderRegime THREW:', err);
+    console.error('[REGIME] Stack:', err.stack);
+  }
 }
 
 // ─── UPDATE renderAll TO INCLUDE NEW TABS ─────────────────────────────────
