@@ -444,6 +444,17 @@ td.L{text-align:left;color:var(--sub)}
 'use strict';
 const KEY='clNi93nfcGdrKTdffUjRK2U6R8luhRZbYcEydnGT';
 
+// ─── MUTABLE GLOBAL STATE ────────────────────────────────────────────────────
+let OIL={}, GAS={}, PERIODS=[], CH={}, SUPP_LOADED=false;
+
+// ─── EIA PROXY CHAIN (PX = current working proxy index) ─────────────────────
+const PROXY=[
+  u=>u,
+  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+let PX=0;
+
 // ── Pre-loaded Aegis C1-C26 weekly data (2024-04 to 2026-03) ─────────────────
 // Extracted from Aegis_Historical_C1C24_Weekly_2024-2026.xlsx
 // Last as-of date: 2026-03-06. Auto-merges with EIA on load.
@@ -481,6 +492,13 @@ function digestCOTEmbedded(){
   COT_WTI=toArray(COT_EMBEDDED.wti||{});
   COT_GAS=toArray(COT_EMBEDDED.gas||{});
   console.log(`COT baseline: WTI ${COT_WTI.length} wks, GAS ${COT_GAS.length} wks`);
+  // Show baseline data immediately so chart renders green before API returns
+  const _b=$('cot-badge');
+  if(_b){
+    const _lat=COT_WTI[COT_WTI.length-1];
+    _b.textContent=`✓ WTI ${COT_WTI.length}wk · GAS ${COT_GAS.length}wk · NSR ${_lat?(_lat.netShortRatio*100).toFixed(1):'—'}%`;
+    _b.style.background='#22c55e20';_b.style.color='#22c55e';_b.style.border='1px solid #22c55e40';
+  }
 }
 
 // ── Helper: digest daily OVX values into OVX_MONTHLY and refresh UI ──────────
@@ -619,8 +637,9 @@ async function fetchCOT(){
   // corrupting the NSR to ~0% and overwriting valid embedded values.
   const WTI_NAME='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE';
   const GAS_NAME='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE';
-  const bothNames=`'${WTI_NAME}','${GAS_NAME}'`;
-  const cftcUrl=`https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=market_and_exchange_names in(${encodeURIComponent(bothNames)})&$order=report_date_as_mm_dd_yyyy ASC&$limit=10000`;
+  // Use cftc_contract_market_code to avoid name-quoting/encoding issues in Socrata SoQL
+  // WTI-PHYSICAL=067651, Natural Gas=023651
+  const cftcUrl='https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=cftc_contract_market_code=%27067651%27%20OR%20cftc_contract_market_code=%27023651%27&$order=report_date_as_mm_dd_yyyy%20ASC&$limit=10000';
   const proxies=[
     u=>u,
     u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
@@ -2009,7 +2028,7 @@ digestCOTEmbedded();
 loadData();
 // OVX: auto-fetch from Yahoo Finance; falls back to upload button on CORS failure
 fetchOVX();
-// COT: supplement embedded baseline with fresh Disaggregated data from CFTC API
+// COT: supplement embedded baseline with fresh Legacy COT data from CFTC API
 fetchCOT();
 </script>
 </body>
