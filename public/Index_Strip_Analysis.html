@@ -19,7 +19,7 @@
   --text:#e2e8f0;--muted:#64748b;--sub:#94a3b8;
   --mono:'IBM Plex Mono',monospace;
 }
-html{scroll-behavior:smooth}html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+html{scroll-behavior:smooth}html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
 .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
 .brand-name{font-size:15px;font-weight:700;color:#f1f5f9}
 .brand-sub{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:1px}
@@ -29,12 +29,12 @@ html{scroll-behavior:smooth}html,body{height:100%;overflow:hidden;background:var
 .pill-loading{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}
 .pill-ok{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
 .pill-err{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
-.main{height:calc(100vh - 55px);display:flex;flex-direction:column;overflow:hidden;padding:0;max-width:none;margin:0}
+.main{padding:12px 24px 60px;max-width:1600px;margin:0 auto}
 .tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;flex-wrap:wrap;margin-bottom:0;position:sticky;top:55px;z-index:49;margin-bottom:0}
 .tab{padding:7px 14px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:var(--mono);transition:all .15s;white-space:nowrap}
 .tab:hover{color:var(--sub);background:var(--bg3)}
 .tab.active{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
-.panel{display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0}.panel.active{display:flex}
+.panel{display:none}.panel.active{display:block}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px}
 .ct{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.10em;text-transform:uppercase;margin-bottom:4px}
 .cs{font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6}
@@ -75,20 +75,17 @@ td.L{text-align:left;color:var(--sub)}
 .err-code{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 12px;font-size:10px;color:var(--amber);margin:8px 0}
 .retry-btn{background:var(--oil);color:#000;border:none;padding:8px 20px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;margin-top:10px;font-family:var(--mono)}
 
-/* ── Layout: panels-container, always-visible freeze zones, panel scrollbody ── */
-.panels-container{flex:1;display:flex;flex-direction:column;overflow:hidden}
-.tab-bar-wrap{flex-shrink:0;padding:10px 24px 0;background:var(--bg)}
+/* ── Sticky freeze zones ─────────────────────────────────────────────────── */
 .sticky-zone{
-  flex-shrink:0;
+  position:sticky;
+  top:107px;
+  z-index:48;
   background:var(--bg);
-  padding:6px 24px 8px;
+  padding:6px 24px 10px;
+  margin:0 -24px 12px;
   border-bottom:1px solid var(--border2);
-  box-shadow:0 4px 12px -2px rgba(0,0,0,.45);
+  box-shadow:0 4px 16px -2px rgba(0,0,0,.55);
 }
-.panel-body{flex:1;overflow-y:auto;padding:10px 24px 40px}
-.panel-body::-webkit-scrollbar{width:6px}
-.panel-body::-webkit-scrollbar-track{background:var(--bg2)}
-.panel-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
 /* ── Zoom reset buttons ───────────────────────────────────────────────────── */
 .zoom-wrap{position:relative}
@@ -138,7 +135,7 @@ td.L{text-align:left;color:var(--sub)}
 </div>
 
 <div class="main" id="main-content" style="display:none">
-  <div class="tab-bar-wrap">
+  <div style="position:sticky;top:55px;z-index:49;background:var(--bg);padding:10px 0 8px;margin-bottom:0">
   <div class="tabs" style="position:relative;top:0;margin-bottom:0">
     <button class="tab active" onclick="switchTab('overview')">① Overview</button>
     <button class="tab" onclick="switchTab('timemachine')">② Time Machine</button>
@@ -151,24 +148,20 @@ td.L{text-align:left;color:var(--sub)}
     <button class="tab" onclick="switchTab('inputs')">⑨ Data Inputs</button>
   </div>
   </div>
-  <div class="panels-container">
 
   <div id="tab-overview" class="panel active">
     <div class="sticky-zone"><div class="stats" id="ov-stats"></div></div>
-    <div class="panel-body">
     <div class="g2">
       <div class="card sp2"><div class="ct">WTI 12-MO STRIP AVERAGE — FULL HISTORY 2010–PRESENT</div><div class="cs">Monthly avg of 12 front contracts. Red dashed = current level.</div><div class="zoom-wrap" style="position:relative"><button class="rzoom-btn" id="rzoom-ch-ov-wti" onclick="resetZoom('ch-ov-wti');this.style.display='none'">⊙ Reset zoom</button><canvas id="ch-ov-wti" height="150"></canvas></div></div>
       <div class="card sp2"><div class="ct">HENRY HUB 12-MO STRIP AVERAGE — FULL HISTORY 2010–PRESENT</div><div class="cs">Monthly avg of 12 front HH contracts. Includes COVID crash, Ukraine spike, LNG export cycle.</div><div class="zoom-wrap" style="position:relative"><button class="rzoom-btn" id="rzoom-ch-ov-hh" onclick="resetZoom('ch-ov-hh');this.style.display='none'">⊙ Reset zoom</button><canvas id="ch-ov-hh" height="150"></canvas></div></div>
     </div>
     <div class="insight" id="ov-insight"></div>
-    </div><!-- /panel-body -->
   </div>
 
   <div id="tab-timemachine" class="panel">
     <div class="sticky-zone">
       <div class="stats" id="tm-stats"></div>
     </div>
-    <div class="panel-body">
     <div class="ctrl-row">
       <label style="font-size:10px;color:var(--muted);font-weight:700">COMPARE DATE:</label>
       <input type="month" id="tm-date" min="2010-01" value="2022-06"/>
@@ -186,7 +179,6 @@ td.L{text-align:left;color:var(--sub)}
       <div class="card"><div class="ct">P&amp;L SINCE HEDGE DATE</div><div class="cs">Strip change vs the level on selected date.</div><div style="position:relative"><canvas id="ch-tm-pnl" height="195"></canvas></div></div>
     </div>
     <div class="card"><div class="ct">CONTRACT DETAIL TABLE</div><table><thead><tr id="tm-thead"></tr></thead><tbody id="tm-tbody"></tbody></table></div>
-    </div><!-- /panel-body -->
   </div>
 
   <div id="tab-percentile" class="panel">
@@ -198,7 +190,6 @@ td.L{text-align:left;color:var(--sub)}
     <div class="stats" id="pct-stats"></div>
     <div class="insight" id="pct-insight"></div>
     </div><!-- /sticky-zone -->
-    <div class="panel-body">
     <div class="g2">
       <div class="card"><div class="ct">DISTRIBUTION OF MONTHLY STRIP AVERAGES</div><div style="position:relative"><canvas id="ch-pct-hist" height="210"></canvas></div></div>
       <div class="card"><div class="ct">ANNUAL P25–MEDIAN–P75 RANGE BY YEAR</div><div style="position:relative"><canvas id="ch-pct-box" height="210"></canvas></div></div>
@@ -206,7 +197,6 @@ td.L{text-align:left;color:var(--sub)}
     <div class="card"><div class="ct">PERCENTILE RANK BY LOOKBACK WINDOW</div><div id="pct-era" style="margin-top:8px"></div></div>
     <div class="card"><div class="ct">ANNUAL STATISTICS TABLE</div>
       <table><thead><tr><th class="L">Year</th><th>Min</th><th>P25</th><th>Median</th><th>P75</th><th>Max</th><th>Mean</th><th>vs Current</th></tr></thead><tbody id="pct-tbl"></tbody></table></div>
-    </div><!-- /panel-body -->
   </div>
 
   <div id="tab-seasonality" class="panel">
@@ -218,14 +208,12 @@ td.L{text-align:left;color:var(--sub)}
       <button class="cb on" onclick="renderSeasonality()">▶ Update</button>
     </div>
     </div><!-- /sticky-zone -->
-    <div class="panel-body">
     <div class="insight" id="seas-insight"></div>
     <div class="g2">
       <div class="card"><div class="ct">AVG STRIP BY HEDGE ENTRY MONTH</div><div style="position:relative"><canvas id="ch-seas-avg" height="210"></canvas></div></div>
       <div class="card"><div class="ct">AVG STRIP DRIFT 3-MO AFTER HEDGE</div><div class="cs">Negative = strip fell (hedge added value). Best entry months = most negative bars.</div><div style="position:relative"><canvas id="ch-seas-drift" height="210"></canvas></div></div>
     </div>
     <div class="card sp2"><div class="ct">STRIP HEATMAP — YEAR × MONTH</div><div class="cs">Green = high strip (good to hedge). Red = low.</div><div id="seas-hm" style="overflow-x:auto;margin-top:8px"></div></div>
-    </div><!-- /panel-body -->
   </div>
 
   <div id="tab-decay" class="panel">
@@ -239,7 +227,6 @@ td.L{text-align:left;color:var(--sub)}
     </div>
     <div class="insight" id="dec-insight"></div>
     </div><!-- /sticky-zone -->
-    <div class="panel-body">
     <div class="g2">
       <div class="card sp2">
         <div class="ct">ROLLING STRIP AVG — FULL HISTORY (WHAT YOU COULD HAVE LOCKED IN)</div>
@@ -261,12 +248,10 @@ td.L{text-align:left;color:var(--sub)}
       <div class="cs">Positive = contango (deferred at premium — extend tenor). Negative = backwardated (spot at premium — hedge near months).</div>
       <div style="position:relative"><canvas id="ch-dec-cg" height="160"></canvas></div>
     </div>
-    </div><!-- /panel-body -->
   </div>
 
   <div id="tab-scorecard" class="panel">
     <div class="sticky-zone"><div class="stats" id="sc-stats"></div></div>
-    <div class="panel-body">
     <div class="g2">
       <div class="card"><div class="ct">WTI OIL — HEDGE TIMING GATES</div><div id="sc-oil-g"></div></div>
       <div class="card"><div class="ct">HENRY HUB GAS — HEDGE TIMING GATES</div><div id="sc-gas-g"></div></div>
@@ -274,7 +259,6 @@ td.L{text-align:left;color:var(--sub)}
     <div class="card"><div class="ct">RECOMMENDED HEDGE ACTION</div><div id="sc-action" class="insight" style="margin-bottom:0;border-left-color:#22c55e"></div></div>
     <div class="card"><div class="ct">HISTORICAL BENCHMARK TABLE</div>
       <table><thead><tr><th class="L">Benchmark</th><th>WTI 12-Mo</th><th>HH 12-Mo</th><th>WTI vs Now</th><th>HH vs Now</th></tr></thead><tbody id="sc-bench"></tbody></table></div>
-    </div><!-- /panel-body -->
   </div>
   <!-- ═══ TAB 7: STRIP REALIZATION BACKTEST ═══════════════════════════════ -->
   <div id="tab-realization" class="panel">
@@ -304,7 +288,6 @@ td.L{text-align:left;color:var(--sub)}
     <div class="insight" id="rlz-insight"></div>
     <div class="stats" id="rlz-stats"></div>
       </div><!-- /sticky-zone -->
-    <div class="panel-body">
     <div class="g2">
       <div class="card sp2">
         <div class="ct">PREDICTION ERROR BY TENOR C1–C24 — WAS THE STRIP RIGHT?</div>
@@ -328,7 +311,6 @@ td.L{text-align:left;color:var(--sub)}
       <div style="position:relative"><canvas id="ch-rlz-regime" height="130"></canvas></div>
     </div>
   </div>
-    </div><!-- /panel-body -->
   </div>
   <!-- ═══ TAB 8: REGIME CLASSIFIER + HEDGE SIGNAL ═════════════════════════ -->
   <div id="tab-regime" class="panel">
@@ -343,7 +325,6 @@ td.L{text-align:left;color:var(--sub)}
     <div class="stats" id="rg-signal-stats"></div>
     <div class="insight" id="rg-insight"></div>
       </div><!-- /sticky-zone -->
-    <div class="panel-body">
     <div class="g2">
       <div class="card sp2">
         <div class="ct">COMPOSITE HEDGE SIGNAL — FULL HISTORY WITH REALIZED-VS-STRIP LINES</div>
@@ -392,14 +373,12 @@ td.L{text-align:left;color:var(--sub)}
         <div style="position:relative"><canvas id="ch-rg-quad" height="175"></canvas></div>
       </div>
     </div>
-    </div><!-- /panel-body -->
   </div>
 
 </div>
 
   <!-- ⑨ DATA INPUTS TAB -->
   <div id="tab-inputs" class="panel">
-    <div class="panel-body">
     <div class="ctrl-row" style="padding:10px 0 8px;margin-bottom:6px">
       <span style="font-size:11px;color:var(--muted);font-weight:700">DATA INPUTS &amp; EXTERNAL SOURCES</span>
     </div>
@@ -490,10 +469,8 @@ td.L{text-align:left;color:var(--sub)}
         </div>
       </div>
     </div>
-    </div><!-- /panel-body -->
   </div>
 
-  </div><!-- /panels-container -->
 </div>
 
 <script>
