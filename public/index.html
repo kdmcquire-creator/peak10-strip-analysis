@@ -1550,9 +1550,15 @@ function renderRegime(){
       // (lockedIn − realized) / realized × 100
       // Positive = good hedge (locked in above market). Negative = bad hedge.
       // Symmetric: ±$20 from same realized price = same ± percentage.
-      rvs[tn].push({p, pct:+((lockedIn-realized)/realized*100).toFixed(2)});
+      const rawPct=(lockedIn-realized)/realized*100;
+      // Clip to ±50% so spikes don't cause Chart.js to auto-range and hide other lines
+      const clippedPct=Math.max(-50,Math.min(50,rawPct));
+      rvs[tn].push({p, pct:+clippedPct.toFixed(2)});
     });
   });
+  // Diagnostic: log how many observations each RvS tenor has
+  tenorLines.forEach(tn=>console.log(`RvS C${tn}: ${rvs[tn].length} obs, first:`,rvs[tn][0], 'last:',rvs[tn][rvs[tn].length-1]));
+
   const signalHistory=PERIODS.map(p=>({p,v:computeSignal(p,c,allVals,[])})).filter(d=>d.v!=null);
   // Build unified labels (signal history periods)
   const sigLabels=signalHistory.map(d=>d.p);
@@ -1565,26 +1571,46 @@ function renderRegime(){
       fill:false,yAxisID:'y2',spanGaps:false
     };
   });
-  CH['ch-rg-signal']=new Chart($('ch-rg-signal'),{type:'line',data:{
+  // ── Crosshair plugin — vertical line that tracks cursor across all datasets ──
+  const crosshairPlugin={
+    id:'crosshair',
+    afterDraw(chart){
+      if(chart._crossX==null) return;
+      const {ctx,chartArea:{top,bottom}}=chart;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(chart._crossX,top);
+      ctx.lineTo(chart._crossX,bottom);
+      ctx.strokeStyle='#94a3b855';
+      ctx.lineWidth=1;
+      ctx.setLineDash([4,3]);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  const sigCanvas=$('ch-rg-signal');
+  CH['ch-rg-signal']=new Chart(sigCanvas,{type:'line',data:{
     labels:sigLabels,
     datasets:[
       {label:'Hedge Signal (0–100)',data:signalHistory.map(d=>d.v),
-        borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#6366f118',tension:0.3,yAxisID:'y',spanGaps:true},
+        borderColor:'#6366f1',borderWidth:1.5,pointRadius:0,fill:true,
+        backgroundColor:'#6366f118',tension:0.3,yAxisID:'y',spanGaps:true},
       {label:'Today',data:signalHistory.map(d=>d.p===lat?d.v:null),
-        pointRadius:6,pointBackgroundColor:signalColor,borderColor:signalColor,borderWidth:0,showLine:false,yAxisID:'y'},
+        pointRadius:6,pointBackgroundColor:signalColor,borderColor:signalColor,
+        borderWidth:0,showLine:false,yAxisID:'y'},
       ...rvsDatasets
     ]},
     options:{...bO,
       interaction:{mode:'index',intersect:false},
       plugins:{...bO.plugins,
-        legend:{...bO.plugins?.legend,display:true,labels:{color:'#94a3b8',font:{size:9,family:'IBM Plex Mono'},boxWidth:12,padding:8}},
+        crosshair:crosshairPlugin,
+        legend:{...bO.plugins?.legend,display:true,
+          labels:{color:'#94a3b8',font:{size:9,family:'IBM Plex Mono'},boxWidth:12,padding:8}},
         annotation:{annotations:{
           h70:{type:'line',yMin:70,yMax:70,borderColor:'#22c55e44',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
           h40:{type:'line',yMin:40,yMax:40,borderColor:'#ef444444',borderWidth:1,borderDash:[4,4],yScaleID:'y'},
-          z0:{type:'line',yMin:0,yMax:0,borderColor:'#47556944',borderWidth:1,borderDash:[2,4],yScaleID:'y2'},
-          // Shade the trailing 12-month zone where RvS outcomes aren't yet known
-          // The 12-mo line lags by 12mo, 9-mo by 9mo, etc.
-          // Shade from the 3-mo cutoff to present to show what's "in progress"
+          z0:{type:'line',yMin:0,yMax:0,borderColor:'#47556966',borderWidth:1,borderDash:[2,4],yScaleID:'y2'},
           pendingBox:{type:'box',
             xMin:sigLabels[Math.max(0,sigLabels.length-12)],
             xMax:sigLabels[sigLabels.length-1],
@@ -1598,11 +1624,32 @@ function renderRegime(){
         y:{...bO.scales.y,min:0,max:100,position:'left',
           title:{display:true,text:'Hedge Signal',color:'#6366f1',font:{size:9}},
           ticks:{...bO.scales.y.ticks,callback:v=>v+'/100'}},
-        y2:{type:'linear',position:'right',reverse:true,
-          title:{display:true,text:'(Cn_locked − Realized) / Realized % — inverted: up=good hedge',color:'#94a3b8',font:{size:9}},
-          ticks:{color:'#64748b',font:{size:8,family:'IBM Plex Mono'},callback:v=>(v>0?'+':'')+v.toFixed(0)+'%'},
+        // y2: locked ±50% so spikes don't collapse the visible range.
+        // reverse:true so positive (good hedge) plots downward = visual alignment with signal.
+        y2:{type:'linear',position:'right',reverse:true,min:-50,max:50,
+          title:{display:true,text:'(Cn_locked − Realized) / Realized %  ↑ good hedge',color:'#94a3b8',font:{size:9}},
+          ticks:{color:'#64748b',font:{size:8,family:'IBM Plex Mono'},
+            callback:v=>(v>0?'+':'')+v.toFixed(0)+'%',
+            stepSize:10},
           grid:{drawOnChartArea:false},
           border:{color:'#1e3050'}}}}});
+
+  // Wire up crosshair: track mouse position → re-draw overlay
+  sigCanvas.addEventListener('mousemove',e=>{
+    const chart=CH['ch-rg-signal'];
+    if(!chart) return;
+    const rect=sigCanvas.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    const {left,right}=chart.chartArea;
+    chart._crossX=(x>=left&&x<=right)?x:null;
+    chart.draw();
+  });
+  sigCanvas.addEventListener('mouseleave',()=>{
+    const chart=CH['ch-rg-signal'];
+    if(!chart) return;
+    chart._crossX=null;
+    chart.draw();
+  });
 
   // ── Chart 2: Forward outcomes in same regime ──────────────────────────────
   if(latReg){
