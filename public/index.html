@@ -78,10 +78,10 @@ td.L{text-align:left;color:var(--sub)}
 
 <div id="loader">
   <div style="font-size:30px">⚡</div>
-  <div style="font-size:18px;font-weight:700;color:var(--oil)">LOADING EIA STRIP DATA</div>
+  <div style="font-size:18px;font-weight:700;color:var(--oil)">LOADING STRIP DATA</div>
   <div style="font-size:11px;color:var(--muted)" id="ld-msg">Connecting...</div>
   <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
-  <div style="font-size:10px;color:var(--border2)" id="ld-detail">Fetching NYMEX WTI &amp; Henry Hub futures (2010–present) from U.S. Energy Information Administration API — 24 series, ~15–30 seconds</div>
+  <div style="font-size:10px;color:var(--border2)" id="ld-detail">First load: fetching NYMEX WTI &amp; Henry Hub futures (2010–present) from EIA API — 24 series, ~15–30 seconds. Cached after first load — subsequent opens are instant.</div>
   <div style="font-size:10px;color:var(--muted);margin-top:4px" id="ld-series"></div>
 </div>
 
@@ -124,6 +124,7 @@ td.L{text-align:left;color:var(--sub)}
     <button class="tab" onclick="switchTab('scorecard')">⑥ Scorecard</button>
     <button class="tab" onclick="switchTab('realization')">⑦ Realization</button>
     <button class="tab" onclick="switchTab('regime')">⑧ Regime Signal</button>
+    <button class="tab" onclick="switchTab('inputs')">⑨ Data Inputs</button>
   </div>
   </div>
 
@@ -343,9 +344,109 @@ td.L{text-align:left;color:var(--sub)}
 
 </div>
 
+  <!-- ⑨ DATA INPUTS TAB -->
+  <div id="tab-inputs" class="panel">
+    <div class="ctrl-row" style="position:sticky;top:108px;z-index:48;background:var(--bg);padding:10px 0 8px;margin-bottom:6px">
+      <span style="font-size:11px;color:var(--muted);font-weight:700">DATA INPUTS &amp; EXTERNAL SOURCES</span>
+    </div>
+
+    <div class="g2">
+      <!-- OVX -->
+      <div class="card">
+        <div class="ct">OVX — CBOE CRUDE OIL VOLATILITY INDEX</div>
+        <div class="cs">Required for the OVX implied volatility component of the composite hedge signal. CBOE blocks automated downloads — download manually and upload via the header button.</div>
+        <div style="margin:16px 0 8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <a href="https://www.cboe.com/us/indices/dashboard/OVX/" target="_blank"
+            style="display:inline-block;padding:10px 20px;background:#22c55e;color:#000;font-weight:700;font-size:12px;border-radius:6px;text-decoration:none;font-family:var(--mono);letter-spacing:0.05em">
+            ↗ STEP 1: DOWNLOAD FROM CBOE
+          </a>
+          <label style="cursor:pointer">
+            <input type="file" accept=".csv" style="display:none" onchange="loadOVXFile(this)"/>
+            <span style="display:inline-block;padding:10px 20px;background:#22c55e;color:#000;font-weight:700;font-size:12px;border-radius:6px;font-family:var(--mono);letter-spacing:0.05em;cursor:pointer">
+              ⬆ STEP 2: UPLOAD OVX CSV
+            </span>
+          </label>
+        </div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.8;margin-top:8px">
+          1. Click <strong>DOWNLOAD</strong> → cboe.com opens in new tab → click <strong>Historical Data</strong> → <strong>Download</strong><br>
+          2. Return here → click <strong>UPLOAD OVX CSV</strong> → select the downloaded file<br>
+          <span style="color:#f59e0b">Supports both formats: DATE,OVX and Date,Open,High,Low,Close</span>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:6px;font-size:10px;color:var(--muted)">
+          <span id="ovx-input-status">Status: <span style="color:#f59e0b">Not loaded</span> — upload via header button</span>
+        </div>
+      </div>
+
+      <!-- COT -->
+      <div class="card">
+        <div class="ct">COT — CFTC COMMITMENTS OF TRADERS</div>
+        <div class="cs">Producer/merchant net short ratio for WTI — measures how hedged your peers are. Auto-fetch attempted on load via CFTC API. If that fails, download and upload manually.</div>
+        <div style="margin:16px 0 8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <a href="https://www.cftc.gov/dea/options/deaoilff.htm" target="_blank"
+            style="display:inline-block;padding:10px 20px;background:#22c55e;color:#000;font-weight:700;font-size:12px;border-radius:6px;text-decoration:none;font-family:var(--mono);letter-spacing:0.05em">
+            ↗ STEP 1: DOWNLOAD FROM CFTC
+          </a>
+          <label style="cursor:pointer">
+            <input type="file" accept=".csv,.txt" style="display:none" onchange="loadCOTFile(this)"/>
+            <span style="display:inline-block;padding:10px 20px;background:#22c55e;color:#000;font-weight:700;font-size:12px;border-radius:6px;font-family:var(--mono);letter-spacing:0.05em;cursor:pointer">
+              ⬆ STEP 2: UPLOAD COT CSV
+            </span>
+          </label>
+        </div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.8;margin-top:8px">
+          <strong style="color:var(--sub)">Auto-fetch first:</strong> CFTC API attempted on every load automatically<br>
+          <strong style="color:var(--sub)">If auto-fetch fails:</strong><br>
+          1. Click <strong>DOWNLOAD</strong> → CFTC page opens → download Disaggregated Futures Only CSV<br>
+          2. Return here → click <strong>UPLOAD COT CSV</strong> → select the file<br>
+          <span style="color:#f59e0b">Accepts TFF format, any year range</span>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:6px;font-size:10px;color:var(--muted)">
+          <span id="cot-input-status">Status: <span style="color:#f59e0b">Attempting auto-fetch…</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="g2" style="margin-top:0">
+      <!-- EIA -->
+      <div class="card">
+        <div class="ct">EIA NYMEX FUTURES — AUTO-LOADED</div>
+        <div class="cs">12 WTI crude futures contracts (NYMEX RCLC1–RCLC12) and 12 Henry Hub natural gas futures (RNGC1–RNGC12) — monthly settle prices from Jan 2010 to present. These are the C1 through C12 forward strip prices published monthly by the EIA. Fetched automatically on load — no action required.</div>
+        <div style="margin:16px 0 8px">
+          <a href="https://www.eia.gov/opendata/" target="_blank"
+            style="display:inline-block;padding:10px 20px;background:#334155;color:#94a3b8;font-weight:700;font-size:12px;border-radius:6px;text-decoration:none;font-family:var(--mono);letter-spacing:0.05em;border:1px solid var(--border2)">
+            ↗ EIA OPEN DATA (INFO ONLY)
+          </a>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:6px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
+          <span id="eia-input-status">Status: <span style="color:#f59e0b">Loading…</span></span>
+          <button onclick="clearEIACache();alert('EIA cache cleared. Reload the page to re-fetch from API.')"
+            style="font-size:9px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--bg2);color:var(--muted);cursor:pointer;font-family:var(--mono)">
+            ↺ Clear Cache
+          </button>
+        </div>
+      </div>
+
+      <!-- Aegis -->
+      <div class="card">
+        <div class="ct">AEGIS C1–C26 WEEKLY — AUTO-LOADED</div>
+        <div class="cs">Weekly forward curve snapshots (C1–C26) from Apr 2024 through Mar 2026. Pre-embedded in this file — no upload required. Extends EIA data to present and fills gaps in recent months. To update with a newer Aegis export, use the ⬆ Upload Aegis C1–C26 button in the header.</div>
+        <div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:6px;font-size:10px;color:var(--muted)">
+          <span id="aegis-input-status">Status: <span style="color:#22c55e">✓ Pre-loaded · 2024-04 to 2026-03 · C1–C26</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <script>
 'use strict';
 const KEY='clNi93nfcGdrKTdffUjRK2U6R8luhRZbYcEydnGT';
+
+// ── Pre-loaded Aegis C1-C26 weekly data (2024-04 to 2026-03) ─────────────────
+// Extracted from Aegis_Historical_C1C24_Weekly_2024-2026.xlsx
+// Last as-of date: 2026-03-06. Auto-merges with EIA on load.
+const AEGIS_EMBEDDED={"oil":{"2024-04":{"1":84.6217,"2":84.12,"3":83.36,"4":82.54,"5":81.73,"6":80.99,"7":80.3,"8":79.64,"9":78.99,"10":78.45,"11":77.9,"12":77.42,"13":76.96,"14":76.58,"15":76.12,"16":75.71,"17":75.36,"18":74.99,"19":74.7,"20":74.3,"21":73.91,"22":73.61,"23":73.26,"24":72.98,"25":80.8385,"26":77.8559},"2024-05":{"1":77.6967,"2":77.68,"3":77.37,"4":77.03,"5":76.6,"6":76.22,"7":75.86,"8":75.5,"9":75.22,"10":74.92,"11":74.61,"12":74.29,"13":74.04,"14":73.72,"15":73.44,"16":73.21,"17":72.95,"18":72.73,"19":72.44,"20":72.14,"21":71.91,"22":71.65,"23":71.45,"24":71.23,"25":76.0831,"26":74.3294},"2024-06":{"1":82.3567,"2":81.49,"3":80.7,"4":79.94,"5":79.32,"6":78.81,"7":78.24,"8":77.79,"9":77.35,"10":76.93,"11":76.49,"12":76.07,"13":75.63,"14":75.25,"15":74.95,"16":74.59,"17":74.31,"18":73.88,"19":73.51,"20":73.22,"21":72.92,"22":72.65,"23":72.37,"24":72.08,"25":78.7906,"26":76.2853},"2024-07":{"1":77.8667,"2":76.79,"3":76.05,"4":75.5,"5":75.04,"6":74.66,"7":74.36,"8":74.02,"9":73.71,"10":73.37,"11":73.06,"12":72.72,"13":72.42,"14":72.16,"15":71.86,"16":71.63,"17":71.34,"18":71.04,"19":70.82,"20":70.64,"21":70.43,"22":70.2,"23":69.97,"24":69.73,"25":74.7622,"26":72.8911},"2024-08":{"1":74.1167,"2":73.32,"3":72.63,"4":72.19,"5":71.86,"6":71.65,"7":71.4,"8":71.16,"9":70.89,"10":70.65,"11":70.4,"12":70.17,"13":69.99,"14":69.76,"15":69.56,"16":69.29,"17":69.06,"18":68.9,"19":68.77,"20":68.59,"21":68.4,"22":68.21,"23":68.03,"24":67.88,"25":71.7031,"26":70.2865},"2024-09":{"1":68.7117,"2":68.32,"3":68.02,"4":67.91,"5":67.84,"6":67.75,"7":67.69,"8":67.61,"9":67.55,"10":67.47,"11":67.39,"12":67.32,"13":67.23,"14":67.18,"15":67.1,"16":67.01,"17":66.95,"18":66.89,"19":66.84,"20":66.8,"21":66.81,"22":66.75,"23":66.71,"24":66.69,"25":67.7985,"26":67.3559},"2024-10":{"1":72.53,"2":72.18,"3":71.83,"4":71.65,"5":71.41,"6":71.24,"7":71.06,"8":70.95,"9":70.75,"10":70.56,"11":70.36,"12":70.17,"13":70.0,"14":69.67,"15":69.46,"16":69.3,"17":69.13,"18":68.99,"19":68.85,"20":68.69,"21":68.53,"22":68.42,"23":68.33,"24":68.22,"25":71.2242,"26":70.095},"2024-11":{"1":69.5083,"2":69.15,"3":68.96,"4":68.85,"5":68.73,"6":68.54,"7":68.32,"8":68.12,"9":67.92,"10":67.71,"11":67.56,"12":67.41,"13":67.25,"14":67.06,"15":66.93,"16":66.78,"17":66.66,"18":66.53,"19":66.35,"20":66.21,"21":66.1,"22":66.01,"23":65.92,"24":65.83,"25":68.3982,"26":67.4337},"2024-12":{"1":69.42,"2":70.92,"3":70.57,"4":70.3,"5":70.03,"6":69.75,"7":69.42,"8":69.1,"9":68.83,"10":68.5,"11":68.24,"12":67.89,"13":67.63,"14":67.44,"15":67.26,"16":67.09,"17":66.92,"18":66.74,"19":66.54,"20":66.39,"21":66.27,"22":66.13,"23":66.02,"24":65.82,"25":69.4142,"26":68.0508},"2025-01":{"1":73.5383,"2":72.97,"3":72.39,"4":71.75,"5":71.14,"6":70.62,"7":70.12,"8":69.56,"9":69.08,"10":68.72,"11":68.32,"12":67.98,"13":67.74,"14":67.49,"15":67.3,"16":67.11,"17":66.92,"18":66.7,"19":66.53,"20":66.38,"21":66.24,"22":66.12,"23":65.92,"24":65.76,"25":70.5157,"26":68.5999},"2025-02":{"1":70.74,"2":70.32,"3":69.84,"4":69.41,"5":68.87,"6":68.34,"7":67.83,"8":67.39,"9":67.07,"10":66.72,"11":66.44,"12":66.25,"13":66.05,"14":65.89,"15":65.74,"16":65.56,"17":65.39,"18":65.25,"19":65.13,"20":65.03,"21":64.94,"22":64.79,"23":64.68,"24":64.59,"25":68.2683,"26":66.7608},"2025-03":{"1":70.325,"2":69.8,"3":69.28,"4":68.69,"5":68.14,"6":67.67,"7":67.22,"8":66.9,"9":66.55,"10":66.28,"11":66.09,"12":65.91,"13":65.77,"14":65.64,"15":65.49,"16":65.34,"17":65.21,"18":65.11,"19":65.02,"20":64.95,"21":64.82,"22":64.71,"23":64.63,"24":64.55,"25":67.7379,"26":66.4206},"2025-04":{"1":63.75,"2":63.15,"3":62.62,"4":62.22,"5":61.94,"6":61.75,"7":61.66,"8":61.63,"9":61.61,"10":61.63,"11":61.69,"12":61.78,"13":61.87,"14":61.93,"15":61.98,"16":62.03,"17":62.09,"18":62.19,"19":62.25,"20":62.28,"21":62.31,"22":62.35,"23":62.42,"24":62.51,"25":62.1192,"26":62.1517},"2025-05":{"1":61.2567,"2":60.46,"3":59.75,"4":59.28,"5":59.08,"6":59.03,"7":59.15,"8":59.26,"9":59.37,"10":59.53,"11":59.68,"12":59.8,"13":59.87,"14":59.95,"15":60.03,"16":60.12,"17":60.24,"18":60.34,"19":60.41,"20":60.47,"21":60.54,"22":60.65,"23":60.78,"24":60.87,"25":59.6372,"26":59.9965},"2025-06":{"1":65.4783,"2":64.34,"3":63.5,"4":62.77,"5":62.44,"6":62.47,"7":62.39,"8":62.37,"9":62.41,"10":62.42,"11":62.44,"12":62.43,"13":62.43,"14":62.47,"15":62.54,"16":62.59,"17":62.64,"18":62.65,"19":62.65,"20":62.67,"21":62.67,"22":62.76,"23":62.81,"24":62.82,"25":62.9549,"26":62.7983},"2025-07":{"1":65.53,"2":64.9,"3":64.37,"4":64.08,"5":63.96,"6":63.86,"7":63.82,"8":63.77,"9":63.74,"10":63.71,"11":63.65,"12":63.59,"13":63.55,"14":63.57,"15":63.57,"16":63.56,"17":63.48,"18":63.44,"19":63.42,"20":63.39,"21":63.43,"22":63.46,"23":63.49,"24":63.48,"25":64.0817,"26":63.7842},"2025-08":{"1":64.8433,"2":64.16,"3":63.77,"4":63.54,"5":63.42,"6":63.36,"7":63.3,"8":63.29,"9":63.27,"10":63.16,"11":63.09,"12":63.06,"13":63.06,"14":63.06,"15":63.05,"16":63.0,"17":62.98,"18":62.97,"19":62.99,"20":63.04,"21":63.08,"22":63.08,"23":63.11,"24":63.15,"25":63.5219,"26":63.2847},"2025-09":{"1":66.5567,"2":65.95,"3":65.54,"4":65.26,"5":65.12,"6":64.96,"7":64.83,"8":64.74,"9":64.63,"10":64.48,"11":64.37,"12":64.3,"13":64.23,"14":64.17,"15":64.04,"16":63.96,"17":63.92,"18":63.91,"19":63.92,"20":63.94,"21":63.91,"22":63.9,"23":63.92,"24":63.95,"25":65.0614,"26":64.5211},"2025-10":{"1":61.45,"2":61.26,"3":61.04,"4":60.96,"5":60.98,"6":61.01,"7":61.04,"8":61.04,"9":61.02,"10":61.0,"11":61.03,"12":61.05,"13":61.06,"14":61.02,"15":61.03,"16":61.06,"17":61.14,"18":61.24,"19":61.33,"20":61.4,"21":61.45,"22":61.52,"23":61.61,"24":61.71,"25":61.0733,"26":61.1854},"2025-11":{"1":59.1783,"2":59.05,"3":58.96,"4":58.98,"5":59.07,"6":59.17,"7":59.24,"8":59.26,"9":59.25,"10":59.23,"11":59.26,"12":59.29,"13":59.39,"14":59.42,"15":59.48,"16":59.59,"17":59.72,"18":59.83,"19":59.93,"20":60.02,"21":60.12,"22":60.25,"23":60.39,"24":60.51,"25":59.1615,"26":59.5245},"2025-12":{"1":58.85,"2":58.68,"3":58.7,"4":58.68,"5":58.71,"6":58.79,"7":58.78,"8":58.73,"9":58.67,"10":58.65,"11":58.64,"12":58.61,"13":58.63,"14":58.67,"15":58.78,"16":58.88,"17":58.97,"18":59.06,"19":59.14,"20":59.22,"21":59.33,"22":59.45,"23":59.56,"24":59.63,"25":58.7075,"26":58.9087},"2026-01":{"1":66.0233,"2":65.51,"3":65.04,"4":64.69,"5":64.4,"6":64.02,"7":63.7,"8":63.36,"9":63.1,"10":62.88,"11":62.69,"12":62.55,"13":62.47,"14":62.41,"15":62.4,"16":62.42,"17":62.46,"18":62.45,"19":62.46,"20":62.49,"21":62.55,"22":62.58,"23":62.55,"24":62.57,"25":63.9969,"26":63.2406},"2026-02":{"1":67.34,"2":67.41,"3":67.28,"4":66.91,"5":66.37,"6":65.85,"7":65.33,"8":64.86,"9":64.49,"10":64.2,"11":63.91,"12":63.71,"13":63.55,"14":63.38,"15":63.25,"16":63.1,"17":62.96,"18":62.84,"19":62.75,"20":62.7,"21":62.65,"22":62.55,"23":62.48,"24":62.41,"25":65.6383,"26":64.2617},"2026-03":{"1":87.15,"2":82.43,"3":78.39,"4":75.38,"5":73.54,"6":72.04,"7":70.89,"8":69.97,"9":69.09,"10":68.4,"11":67.91,"12":67.48,"13":67.17,"14":66.94,"15":66.71,"16":66.5,"17":66.35,"18":66.22,"19":66.16,"20":66.08,"21":65.95,"22":65.85,"23":65.76,"24":65.68,"25":73.5558,"26":69.9183}},"gas":{"2024-04":{"1":1.614,"2":1.923,"3":2.284,"4":2.411,"5":2.42,"6":2.526,"7":2.943,"8":3.502,"9":3.773,"10":3.609,"11":3.242,"12":3.038,"13":3.1,"14":3.282,"15":3.471,"16":3.518,"17":3.486,"18":3.544,"19":3.878,"20":4.349,"21":4.607,"22":4.391,"23":3.843,"24":3.473,"25":2.7737,"26":3.2595},"2024-05":{"2":2.587,"3":2.662,"4":2.651,"5":2.744,"6":3.109,"7":3.561,"8":3.826,"9":3.654,"10":3.253,"11":3.018,"12":3.048,"13":3.228,"14":3.423,"15":3.446,"16":3.41,"17":3.49,"18":3.789,"19":4.205,"20":4.467,"21":4.231,"22":3.687,"23":3.318,"24":3.343,"25":3.1012,"26":3.3978},"2024-06":{"2":2.601,"3":2.598,"4":2.692,"5":3.081,"6":3.558,"7":3.824,"8":3.662,"9":3.254,"10":3.021,"11":3.047,"12":3.212,"13":3.418,"14":3.455,"15":3.418,"16":3.486,"17":3.786,"18":4.228,"19":4.493,"20":4.245,"21":3.678,"22":3.29,"23":3.303,"24":3.463,"25":3.1409,"26":3.4267},"2024-07":{"1":2.006,"2":2.051,"3":2.185,"4":2.66,"5":3.196,"6":3.482,"7":3.335,"8":2.978,"9":2.814,"10":2.857,"11":3.015,"12":3.19,"13":3.236,"14":3.201,"15":3.265,"16":3.563,"17":3.986,"18":4.261,"19":4.036,"20":3.489,"21":3.122,"22":3.156,"23":3.308,"24":3.481,"25":2.8141,"26":3.1614},"2024-08":{"2":2.127,"3":2.498,"4":3.037,"5":3.329,"6":3.202,"7":2.889,"8":2.768,"9":2.824,"10":2.979,"11":3.143,"12":3.178,"13":3.15,"14":3.22,"15":3.49,"16":3.892,"17":4.157,"18":3.936,"19":3.417,"20":3.092,"21":3.125,"22":3.271,"23":3.426,"24":3.463,"25":2.9067,"26":3.2006},"2024-09":{"1":2.585,"2":2.902,"3":3.304,"4":3.567,"5":3.449,"6":3.161,"7":3.018,"8":3.054,"9":3.183,"10":3.324,"11":3.348,"12":3.328,"13":3.402,"14":3.643,"15":4.001,"16":4.234,"17":4.019,"18":3.533,"19":3.23,"20":3.258,"21":3.374,"22":3.505,"23":3.533,"24":3.515,"25":3.1852,"26":3.3946},"2024-10":{"1":2.56,"2":3.092,"3":3.344,"4":3.238,"5":2.959,"6":2.881,"7":2.939,"8":3.082,"9":3.239,"10":3.274,"11":3.247,"12":3.315,"13":3.571,"14":3.95,"15":4.164,"16":3.959,"17":3.488,"18":3.18,"19":3.207,"20":3.344,"21":3.489,"22":3.525,"23":3.497,"24":3.563,"25":3.0975,"26":3.3378},"2024-11":{"2":3.363,"3":3.204,"4":2.943,"5":2.907,"6":3.005,"7":3.158,"8":3.319,"9":3.365,"10":3.349,"11":3.433,"12":3.707,"13":4.144,"14":4.411,"15":4.187,"16":3.707,"17":3.366,"18":3.386,"19":3.502,"20":3.633,"21":3.67,"22":3.642,"23":3.713,"24":3.932,"25":3.2503,"26":3.5237},"2024-12":{"1":3.514,"2":3.383,"3":2.967,"4":2.967,"5":3.064,"6":3.262,"7":3.455,"8":3.492,"9":3.471,"10":3.546,"11":3.83,"12":4.281,"13":4.568,"14":4.287,"15":3.777,"16":3.451,"17":3.482,"18":3.614,"19":3.749,"20":3.784,"21":3.757,"22":3.825,"23":4.06,"24":4.439,"25":3.436,"26":3.6677},"2025-01":{"2":3.044,"3":3.07,"4":3.171,"5":3.378,"6":3.583,"7":3.643,"8":3.619,"9":3.679,"10":3.91,"11":4.333,"12":4.587,"13":4.259,"14":3.754,"15":3.424,"16":3.46,"17":3.59,"18":3.724,"19":3.765,"20":3.731,"21":3.784,"22":4.005,"23":4.404,"24":4.654,"25":3.6379,"26":3.764},"2025-02":{"2":3.834,"3":3.896,"4":4.044,"5":4.209,"6":4.256,"7":4.224,"8":4.264,"9":4.476,"10":4.838,"11":5.068,"12":4.675,"13":4.095,"14":3.664,"15":3.669,"16":3.774,"17":3.893,"18":3.931,"19":3.896,"20":3.949,"21":4.126,"22":4.493,"23":4.762,"24":4.33,"25":4.344,"26":4.1898},"2025-03":{"1":3.95,"2":4.065,"3":4.185,"4":4.401,"5":4.467,"6":4.426,"7":4.458,"8":4.688,"9":5.119,"10":5.365,"11":5.002,"12":4.406,"13":3.969,"14":3.97,"15":4.07,"16":4.191,"17":4.232,"18":4.197,"19":4.252,"20":4.405,"21":4.751,"22":5.003,"23":4.568,"24":3.868,"25":4.5443,"26":4.417},"2025-04":{"1":2.937,"2":3.114,"3":3.394,"4":3.474,"5":3.458,"6":3.534,"7":3.883,"8":4.375,"9":4.664,"10":4.372,"11":3.896,"12":3.617,"13":3.634,"14":3.78,"15":3.955,"16":3.991,"17":3.939,"18":3.982,"19":4.153,"20":4.491,"21":4.736,"22":4.33,"23":3.701,"24":3.293,"25":3.7265,"26":3.8626},"2025-05":{"2":3.447,"3":3.523,"4":3.508,"5":3.608,"6":3.981,"7":4.505,"8":4.794,"9":4.537,"10":4.097,"11":3.808,"12":3.804,"13":3.968,"14":4.143,"15":4.191,"16":4.14,"17":4.181,"18":4.359,"19":4.72,"20":4.954,"21":4.584,"22":3.946,"23":3.468,"24":3.436,"25":3.9647,"26":4.074},"2025-06":{"1":3.261,"2":3.739,"3":3.754,"4":3.855,"5":4.235,"6":4.804,"7":5.094,"8":4.794,"9":4.295,"10":3.98,"11":3.966,"12":4.118,"13":4.299,"14":4.349,"15":4.302,"16":4.353,"17":4.539,"18":4.891,"19":5.121,"20":4.68,"21":4.005,"22":3.537,"23":3.498,"24":3.637,"25":4.1579,"26":4.2127},"2025-07":{"1":3.11,"2":3.158,"3":3.258,"4":3.627,"5":4.207,"6":4.524,"7":4.251,"8":3.824,"9":3.604,"10":3.612,"11":3.76,"12":3.947,"13":4.008,"14":3.963,"15":4.016,"16":4.225,"17":4.603,"18":4.842,"19":4.465,"20":3.849,"21":3.424,"22":3.395,"23":3.534,"24":3.716,"25":3.7402,"26":3.8718},"2025-08":{"2":2.997,"3":3.333,"4":3.914,"5":4.243,"6":4.008,"7":3.619,"8":3.487,"9":3.525,"10":3.709,"11":3.906,"12":3.96,"13":3.918,"14":3.956,"15":4.165,"16":4.557,"17":4.805,"18":4.458,"19":3.864,"20":3.448,"21":3.421,"22":3.568,"23":3.74,"24":3.795,"25":3.7001,"26":3.8433},"2025-09":{"1":2.835,"2":3.206,"3":3.84,"4":4.165,"5":3.964,"6":3.607,"7":3.473,"8":3.506,"9":3.669,"10":3.863,"11":3.907,"12":3.866,"13":3.911,"14":4.106,"15":4.508,"16":4.758,"17":4.424,"18":3.839,"19":3.437,"20":3.417,"21":3.554,"22":3.724,"23":3.773,"24":3.74,"25":3.6584,"26":3.7955},"2025-10":{"2":4.124,"3":4.369,"4":4.13,"5":3.761,"6":3.661,"7":3.688,"8":3.842,"9":4.031,"10":4.089,"11":4.048,"12":4.095,"13":4.28,"14":4.714,"15":4.948,"16":4.612,"17":3.961,"18":3.544,"19":3.517,"20":3.644,"21":3.807,"22":3.861,"23":3.831,"24":3.896,"25":3.9853,"26":4.0197},"2025-11":{"2":4.85,"3":4.418,"4":3.823,"5":3.699,"6":3.719,"7":3.861,"8":4.042,"9":4.092,"10":4.057,"11":4.103,"12":4.303,"13":4.749,"14":5.009,"15":4.631,"16":3.988,"17":3.568,"18":3.539,"19":3.656,"20":3.803,"21":3.85,"22":3.828,"23":3.893,"24":4.074,"25":4.0879,"26":4.0676},"2025-12":{"1":4.366,"2":3.877,"3":3.306,"4":3.29,"5":3.344,"6":3.534,"7":3.762,"8":3.818,"9":3.787,"10":3.83,"11":4.042,"12":4.492,"13":4.73,"14":4.313,"15":3.734,"16":3.432,"17":3.434,"18":3.568,"19":3.73,"20":3.775,"21":3.749,"22":3.808,"23":3.982,"24":4.42,"25":3.7873,"26":3.8385},"2026-01":{"2":4.354,"3":4.027,"4":4.008,"5":4.154,"6":4.333,"7":4.37,"8":4.331,"9":4.384,"10":4.565,"11":5.074,"12":5.382,"13":4.777,"14":3.825,"15":3.357,"16":3.327,"17":3.449,"18":3.608,"19":3.657,"20":3.632,"21":3.701,"22":3.896,"23":4.418,"24":4.763,"25":4.4529,"26":4.1475},"2026-02":{"2":2.859,"3":2.881,"4":3.063,"5":3.337,"6":3.416,"7":3.404,"8":3.462,"9":3.735,"10":4.338,"11":4.692,"12":4.211,"13":3.491,"14":3.202,"15":3.193,"16":3.331,"17":3.52,"18":3.574,"19":3.554,"20":3.619,"21":3.842,"22":4.418,"23":4.777,"24":4.217,"25":3.5816,"26":3.6581},"2026-03":{"1":3.186,"2":3.2,"3":3.351,"4":3.623,"5":3.706,"6":3.686,"7":3.746,"8":4.028,"9":4.843,"10":5.277,"11":4.681,"12":3.669,"13":3.235,"14":3.206,"15":3.336,"16":3.522,"17":3.571,"18":3.552,"19":3.628,"20":3.855,"21":4.531,"22":4.978,"23":4.322,"24":3.467,"25":3.9163,"26":3.8416}}};
 
 // ── OVX & COT global stores ───────────────────────────────────────────────────
 let OVX_MONTHLY={};  // YYYY-MM → monthly avg OVX close
@@ -370,6 +471,9 @@ function digestOVXDays(dailyMap){
     badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
   }
   if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
+  // Update Inputs tab OVX status
+  const ovxStat=$('ovx-input-status');
+  if(ovxStat&&months.length) ovxStat.innerHTML=`Status: <span style="color:#22c55e">✓ Loaded · ${months[0]} – ${months[months.length-1]} · ${months.length} months</span>`;
   return months.length;
 }
 
@@ -512,6 +616,8 @@ async function fetchCOT(){
       badge.textContent=`✓ ${COT_WTI.length} wks · NSR ${(latest.netShortRatio*100).toFixed(1)}% · ${pctRank}th pct`;
       badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
       console.log(`COT: ${COT_WTI.length} weeks via ${attempt===cftcUrl?'direct CFTC':attempt.slice(0,40)}`);
+      const cotStat=$('cot-input-status');
+      if(cotStat) cotStat.innerHTML=`Status: <span style="color:#22c55e">✓ Auto-fetched · ${COT_WTI[0]?.date} – ${latest.date} · ${COT_WTI.length} weeks</span>`;
       if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
       return;
     }catch(e){
@@ -769,7 +875,11 @@ function loadSupplement(inp){
       btn.style.color='var(--green)';
       btn.textContent=`✓ C1–C${cMax} Loaded`;
       $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${latest}`;
+      // Aegis button updated in finishLoad()
       clearTimeout(loadTimeout);
+  // Update Inputs tab EIA status
+  const eiaStatus=$('eia-input-status');
+  if(eiaStatus) eiaStatus.innerHTML=`Status: <span style="color:#22c55e">✓ Loaded · ${PERIODS[0]} – ${PERIODS[PERIODS.length-1]} · ${PERIODS.length} periods</span>`;
   if(typeof renderAll==='function') renderAll();
     }catch(err){
       console.error('Supplement parse error:',err);
@@ -829,21 +939,78 @@ async function fetchSeries(sid){
 }
 
 // ─── LOAD ALL 24 SERIES ─────────────────────────────────────
+// ── EIA cache helpers ────────────────────────────────────────────────────────
+// EIA publishes C1-C12 monthly futures. Once fetched they don't change —
+// cache in localStorage so subsequent loads are instant (no API call needed).
+const EIA_CACHE_KEY='peak10_eia_v1';
+const EIA_CACHE_MAX_AGE=7*24*60*60*1000; // 7 days — refresh weekly just in case
+
+function saveEIACache(oil,gas){
+  try{
+    localStorage.setItem(EIA_CACHE_KEY,JSON.stringify({ts:Date.now(),oil,gas}));
+    console.log('EIA data cached to localStorage');
+  }catch(e){console.warn('EIA cache write failed:',e.message);}
+}
+
+function loadEIACache(){
+  try{
+    const raw=localStorage.getItem(EIA_CACHE_KEY);
+    if(!raw) return null;
+    const c=JSON.parse(raw);
+    if(!c?.ts||!c?.oil||!c?.gas) return null;
+    if(Date.now()-c.ts>EIA_CACHE_MAX_AGE){
+      console.log('EIA cache expired — will re-fetch');
+      return null;
+    }
+    return c;
+  }catch(e){return null;}
+}
+
+function clearEIACache(){
+  try{localStorage.removeItem(EIA_CACHE_KEY);}catch(e){}
+}
+
+function applyEIAData(oilData,gasData){
+  // Populate OIL and GAS stores from plain objects {period: {1:v, 2:v, ...}}
+  Object.entries(oilData).forEach(([p,contracts])=>{
+    if(!OIL[p]) OIL[p]={};
+    Object.assign(OIL[p],contracts);
+  });
+  Object.entries(gasData).forEach(([p,contracts])=>{
+    if(!GAS[p]) GAS[p]={};
+    Object.assign(GAS[p],contracts);
+  });
+}
+
 async function loadData(){
-  ldr('Connecting to EIA API...',5);
-  // Safety net: if the entire load hasn't completed in 90s, surface an error
+  // ── Step 1: try localStorage cache first ────────────────────────────────
+  const cached=loadEIACache();
+  if(cached){
+    ldr('Loading from cache...',30);
+    applyEIAData(cached.oil,cached.gas);
+    ldr('Processing...',85);
+    finishLoad(false);
+    return;
+  }
+
+  // ── Step 2: cache miss — fetch from EIA API ──────────────────────────────
+  ldr('Fetching EIA strip data (one-time — will cache for future loads)...',5);
   const loadTimeout=setTimeout(()=>{
     if(document.getElementById('loader')?.style.display!=='none'){
       showErr('EIA API load timed out after 90 seconds.',
-        'The EIA API may be experiencing delays. Click Retry — it usually resolves on the second attempt.<br>If it persists, the API may be temporarily down.');
+        'Click Retry. After one successful load the data is cached and this screen won\'t appear again.');
     }
   },90000);
+
   const oIds=Array.from({length:12},(_,i)=>`PET.RCLC${i+1}.M`);
   const gIds=Array.from({length:12},(_,i)=>`NG.RNGC${i+1}.M`);
   let done=0;const tot=24;
-  const prog=()=>{done++;ldr(null,5+done/tot*82,null,`Loaded ${done}/${tot} series`);};
+  const prog=()=>{done++;ldr(null,5+done/tot*82,null,`Fetching ${done}/${tot} series — cached after this`);};
 
-  async function fetchBatch(ids,store,prefix,suffix){
+  // Plain objects to capture for caching (separate from OIL/GAS which get Aegis merged in)
+  const oilRaw={}, gasRaw={};
+
+  async function fetchBatch(ids,store,raw,prefix,suffix){
     for(let b=0;b<ids.length;b+=4){
       const batch=ids.slice(b,b+4);
       const res=await Promise.all(batch.map(id=>fetchSeries(id).then(d=>{prog();return{id,d};})));
@@ -853,39 +1020,71 @@ async function loadData(){
           const p=String(row.period||'').slice(0,7);
           if(!p||p.length<7)return;
           if(!store[p])store[p]={};
+          if(!raw[p])raw[p]={};
           const v=parseFloat(row.value??row[0]);
-          if(!isNaN(v))store[p][n]=v;
+          if(!isNaN(v)){store[p][n]=v;raw[p][n]=v;}
         });
       });
     }
   }
 
-  ldr('Step 1/2 — WTI crude oil futures (RCLC1–RCLC12)...',5);
-  await fetchBatch(oIds,OIL,'PET.RCLC','.M');
-  ldr('Step 2/2 — Henry Hub gas futures (RNGC1–RNGC12)...',45);
-  await fetchBatch(gIds,GAS,'NG.RNGC','.M');
+  ldr('Step 1/2 — WTI crude (RCLC1–RCLC12)...',5);
+  await fetchBatch(oIds,OIL,oilRaw,'PET.RCLC','.M');
+  ldr('Step 2/2 — Henry Hub gas (RNGC1–RNGC12)...',45);
+  await fetchBatch(gIds,GAS,gasRaw,'NG.RNGC','.M');
+
+  clearTimeout(loadTimeout);
+  // Save to cache before Aegis merge (store pure EIA data)
+  saveEIACache(oilRaw,gasRaw);
 
   ldr('Processing...',90);
-  // Require at least C1 + C3 (EIA always has both; Aegis-only months have C1-C24)
-  // Aegis months after EIA cutoff are fully valid and included here
+  finishLoad(true);
+}
+
+function finishLoad(fromAPI){
+  // ── Merge Aegis C1-C26 on top of EIA ────────────────────────────────────
+  let aegisMergedNew=0,aegisMergedOverlap=0;
+  Object.entries(AEGIS_EMBEDDED.oil||{}).forEach(([p,contracts])=>{
+    const isNew=!OIL[p]||!OIL[p][1];
+    if(isNew) aegisMergedNew++; else aegisMergedOverlap++;
+    OIL[p]={...(OIL[p]||{}),...contracts};
+  });
+  Object.entries(AEGIS_EMBEDDED.gas||{}).forEach(([p,contracts])=>{
+    GAS[p]={...(GAS[p]||{}),...contracts};
+  });
+  console.log(`EIA ${fromAPI?'fetched from API':'loaded from cache'} · Aegis merged: ${aegisMergedNew} new + ${aegisMergedOverlap} overlap`);
+  SUPP_LOADED=true;
+
   PERIODS=[...new Set([...Object.keys(OIL),...Object.keys(GAS)])]
     .filter(p=>{const o=OIL[p];return o&&o[1]&&(o[3]||o[2]);}).sort();
 
   if(PERIODS.length<12){
+    clearEIACache(); // wipe bad cache
     showErr(
       `Loaded only ${PERIODS.length} data periods. EIA API may be temporarily unavailable.`,
-      `The EIA API occasionally has brief outages. Wait 60 seconds and click Retry.<br>
-       If the issue persists, check <a href="https://www.eia.gov/opendata/" target="_blank" style="color:var(--oil)">api.eia.gov</a> status or rotate the API key in index.html.`
+      `Click Retry — the data will be cached after one successful load so this won't happen again.<br>
+       Check <a href="https://www.eia.gov/opendata/" target="_blank" style="color:var(--oil)">api.eia.gov</a> if retries keep failing.`
     );return;
   }
 
   $('loader').classList.add('hidden');
   $('main-content').style.display='block';
-  $('status-pill').textContent='● Live';
+  $('status-pill').textContent=fromAPI?'● Live':'● Cached';
   $('status-pill').className='pill pill-ok';
   $('range-badge').textContent=`${PERIODS.length} mo · ${PERIODS[0]} – ${PERIODS[PERIODS.length-1]}`;
+  // Update Aegis supplement button to show auto-loaded status
+  const suppBtn=$('supp-btn');
+  if(suppBtn&&SUPP_LOADED){
+    suppBtn.textContent=`✓ Aegis C1–C26 · thru ${PERIODS[PERIODS.length-1]}`;
+    suppBtn.style.color='var(--green)';
+    suppBtn.style.border='1px solid #22c55e40';
+    suppBtn.style.background='#22c55e10';
+  }
+  // Update Inputs tab EIA status
+  const eiaStatus=$('eia-input-status');
+  if(eiaStatus) eiaStatus.innerHTML=`Status: <span style="color:#22c55e">✓ ${fromAPI?'Fetched & cached':'Loaded from cache'} · ${PERIODS[0]} – ${PERIODS[PERIODS.length-1]} · ${PERIODS.length} periods</span>`;
   ldr('Done',100);
-  renderAll();
+  if(typeof renderAll==='function') renderAll();
 }
 
 function showErr(msg,fix){
@@ -897,6 +1096,7 @@ function showErr(msg,fix){
 
 function retryLoad(){
   PX=0;OIL={};GAS={};PERIODS=[];
+  clearEIACache(); // force fresh API fetch on retry
   $('err-panel').style.display='none';
   $('loader').classList.remove('hidden');
   $('ld-fill').style.width='0';
@@ -1355,12 +1555,13 @@ function switchTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   $('tab-'+id).classList.add('active');
   const tabs=document.querySelectorAll('.tab');
-  const order=['overview','timemachine','percentile','seasonality','decay','scorecard','realization','regime'];
+  const order=['overview','timemachine','percentile','seasonality','decay','scorecard','realization','regime','inputs'];
   const idx=order.indexOf(id);
   if(idx>=0&&tabs[idx])tabs[idx].classList.add('active');
   // Lazy-render new tabs on first activation
   if(id==='realization'&&PERIODS.length) renderRealization();
   if(id==='regime'&&PERIODS.length) renderRegime();
+  // inputs tab is static HTML — no render needed
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
