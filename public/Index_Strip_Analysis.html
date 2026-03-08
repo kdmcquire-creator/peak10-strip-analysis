@@ -2171,44 +2171,106 @@ function renderRegime(){
     const cotPct=pctile(cotLatest.netShortRatio,allNSRVals);
     const step=Math.max(1,Math.floor(activeCOT.length/200));
     const cotSampled=activeCOT.filter((_,i)=>i%step===0||i===activeCOT.length-1);
+    // Build WTI/HH spot series aligned to COT dates (C1 settle as spot proxy)
+    const spotStore=c==='gas'?GAS:OIL;
+    const cotSpot=cotSampled.map(d=>{
+      const mo=d.date.slice(0,7);
+      return spotStore[mo]?.[1]||null;
+    });
+    const hasSpot=cotSpot.some(v=>v!=null);
+    const spotLabel=c==='gas'?'HH C1 ($/MMBtu)':'WTI C1 ($/bbl)';
+    const spotColor=c==='gas'?'#06b6d4':'#f59e0b';
     console.log('[REGIME] creating COT chart'); CH['ch-rg-cot']=new Chart($('ch-rg-cot'),{type:'line',data:{
       labels:cotSampled.map(d=>d.date.slice(0,7)),
-      datasets:[{label:cotLabel,data:cotSampled.map(d=>+(d.netShortRatio*100).toFixed(2)),
-        borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:'#06b6d418',tension:0.2}]},
-      options:{...bO,plugins:{...bO.plugins,annotation:{annotations:{
-        cur:{type:'line',yMin:cotLatest.netShortRatio*100,yMax:cotLatest.netShortRatio*100,
-          borderColor:'#f59e0bcc',borderWidth:1.5,borderDash:[4,4],
-          label:{content:`Now: ${(cotLatest.netShortRatio*100).toFixed(1)}% (${cotPct}th pct)`,
-            display:true,position:'start',color:'#f59e0b',font:{size:9,family:'IBM Plex Mono'},backgroundColor:'transparent'}},
-        avg:{type:'line',yMin:allNSRVals.reduce((a,b)=>a+b)/allNSRVals.length*100,yMax:allNSRVals.reduce((a,b)=>a+b)/allNSRVals.length*100,
-          borderColor:'#47556966',borderWidth:1,borderDash:[2,4]}}}},
-        scales:{...bO.scales,y:{...bO.scales.y,ticks:{...bO.scales.y.ticks,callback:v=>v.toFixed(0)+'%'}}}}});
+      datasets:[
+        {label:cotLabel,data:cotSampled.map(d=>+(d.netShortRatio*100).toFixed(2)),
+          borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,fill:true,
+          backgroundColor:'#06b6d418',tension:0.2,yAxisID:'yNSR'},
+        ...(hasSpot?[{label:spotLabel,data:cotSpot,
+          borderColor:spotColor+'99',borderWidth:1.2,pointRadius:0,fill:false,
+          tension:0.2,yAxisID:'ySpot',borderDash:[]}]:[]),
+      ]},
+      options:{...bO,
+        plugins:{...bO.plugins,
+          legend:{display:true,labels:{color:'#94a3b8',font:{size:9,family:'IBM Plex Mono'},boxWidth:12,padding:8}},
+          annotation:{annotations:{
+            cur:{type:'line',yMin:cotLatest.netShortRatio*100,yMax:cotLatest.netShortRatio*100,
+              borderColor:'#06b6d4cc',borderWidth:1.5,borderDash:[4,4],
+              label:{content:`NSR Now: ${(cotLatest.netShortRatio*100).toFixed(1)}% (${cotPct}th pct)`,
+                display:true,position:'start',color:'#06b6d4',font:{size:9,family:'IBM Plex Mono'},backgroundColor:'transparent'}},
+            avg:{type:'line',yMin:allNSRVals.reduce((a,b)=>a+b)/allNSRVals.length*100,yMax:allNSRVals.reduce((a,b)=>a+b)/allNSRVals.length*100,
+              borderColor:'#47556966',borderWidth:1,borderDash:[2,4]}}}},
+        scales:{
+          ...bO.scales,
+          yNSR:{...bO.scales.y,position:'left',
+            title:{display:true,text:'Comm NSR %',color:'#06b6d4',font:{size:9,family:'IBM Plex Mono'}},
+            ticks:{...bO.scales.y.ticks,color:'#06b6d4',callback:v=>v.toFixed(0)+'%'}},
+          ...(hasSpot?{ySpot:{type:'linear',position:'right',grid:{drawOnChartArea:false},
+            title:{display:true,text:c==='gas'?'$/MMBtu':'$/bbl',color:spotColor,font:{size:9,family:'IBM Plex Mono'}},
+            ticks:{color:spotColor,font:{size:9,family:'IBM Plex Mono'},callback:v=>'$'+v.toFixed(c==='gas'?2:0)}}}:{}),
+          x:{...bO.scales.x}}}});
   }
 
   // ── Chart 6: OVX vs strip percentile quadrant scatter ────────────────────
+  const quadEl=$('ch-rg-quad');
+  if(ovxPeriods.length<=12&&quadEl){
+    // No OVX data — draw placeholder
+    const ctx3=quadEl.getContext('2d');
+    ctx3.clearRect(0,0,quadEl.width,quadEl.height);
+    ctx3.fillStyle='#64748b';ctx3.font='12px IBM Plex Mono';ctx3.textAlign='center';
+    ctx3.fillText('⬆  Upload OVX CSV to enable quadrant map',quadEl.width/2,quadEl.height/2-10);
+    ctx3.fillStyle='#475569';ctx3.font='10px IBM Plex Mono';
+    ctx3.fillText('cboe.com → Indices → OVX → Historical Data → download CSV',quadEl.width/2,quadEl.height/2+14);
+  }
   if(ovxPeriods.length>12){
-    const qDots=PERIODS.filter(p=>OVX_MONTHLY[p]!=null).map(p=>{
+    // Build raw dots — strip avg value + OVX for each period that has both
+    const rawDots=PERIODS.filter(p=>OVX_MONTHLY[p]!=null).map(p=>{
       const avg=stripAvg(p,c); if(!avg) return null;
-      return{x:pctile(avg,allVals),y:OVX_MONTHLY[p],p,isCur:p===lat};
+      return{avg,y:OVX_MONTHLY[p],p};
     }).filter(Boolean);
-    // Median OVX for quadrant line
+    // Rank x against ONLY the qDots universe (guarantees full 0-100 spread)
+    const rawAvgs=rawDots.map(d=>d.avg);
+    const qDots=rawDots.map(d=>({...d,x:pctile(d.avg,rawAvgs)}));
+    const qLatest=qDots[qDots.length-1];
     const medOVX=allOVXVals.slice().sort((a,b)=>a-b)[Math.floor(allOVXVals.length/2)];
+    // Colour-coded quadrant groups (exclude the latest point)
+    const grp=(hiS,hiV)=>qDots.filter(d=>d!==qLatest&&(d.x>=50)===hiS&&(d.y>=medOVX)===hiV)
+                               .map(d=>({x:d.x,y:d.y}));
     CH['ch-rg-quad']=new Chart($('ch-rg-quad'),{type:'scatter',data:{datasets:[
-      {label:'Past months',data:qDots.filter(d=>!d.isCur).map(d=>({x:d.x,y:d.y})),
-        backgroundColor:'#47556955',pointRadius:2,pointHoverRadius:4},
-      {label:'TODAY',data:qDots.filter(d=>d.isCur).map(d=>({x:d.x,y:d.y})),
-        backgroundColor:'#f59e0b',pointRadius:8,pointStyle:'star',pointHoverRadius:10},
+      {label:'High strip · Low vol',  data:grp(true,false),
+        backgroundColor:'#22c55ecc',pointRadius:4.5,pointHoverRadius:7,
+        borderColor:'#0f172a',borderWidth:0.5},
+      {label:'High strip · High vol', data:grp(true,true),
+        backgroundColor:'#f59e0bcc',pointRadius:4.5,pointHoverRadius:7,
+        borderColor:'#0f172a',borderWidth:0.5},
+      {label:'Low strip · Low vol',   data:grp(false,false),
+        backgroundColor:'#94a3b8cc',pointRadius:4.5,pointHoverRadius:7,
+        borderColor:'#0f172a',borderWidth:0.5},
+      {label:'Low strip · High vol',  data:grp(false,true),
+        backgroundColor:'#ef4444cc',pointRadius:4.5,pointHoverRadius:7,
+        borderColor:'#0f172a',borderWidth:0.5},
+      {label:`● ${ML(qLatest&&qLatest.p)} (latest)`,
+        data:qLatest?[{x:qLatest.x,y:qLatest.y}]:[],
+        backgroundColor:'#ffffff',pointRadius:8,pointStyle:'circle',
+        pointHoverRadius:11,borderColor:'#f59e0b',borderWidth:3},
     ]},options:{...bO,
-      plugins:{...bO.plugins,annotation:{annotations:{
-        vMid:{type:'line',xMin:50,xMax:50,borderColor:'#47556966',borderWidth:1,borderDash:[3,3]},
-        hMid:{type:'line',yMin:medOVX,yMax:medOVX,borderColor:'#47556966',borderWidth:1,borderDash:[3,3]},
-        lblBL:{type:'label',xValue:75,yValue:medOVX*0.55,content:['HIGH STRIP','LOW VOL','→ HEDGE NOW'],color:'#22c55e88',font:{size:8,weight:'bold',family:'IBM Plex Mono'}},
-        lblTL:{type:'label',xValue:75,yValue:medOVX*1.45,content:['HIGH STRIP','HIGH VOL','→ CONSIDER'],color:'#f59e0b88',font:{size:8,family:'IBM Plex Mono'}},
-        lblBR:{type:'label',xValue:25,yValue:medOVX*0.55,content:['LOW STRIP','LOW VOL','→ WAIT'],color:'#64748b88',font:{size:8,family:'IBM Plex Mono'}},
-      }}},
+      plugins:{...bO.plugins,
+        legend:{display:true,labels:{color:'#94a3b8',font:{size:8,family:'IBM Plex Mono'},boxWidth:10,padding:5}},
+        annotation:{annotations:{
+          vMid:{type:'line',xMin:50,xMax:50,borderColor:'#47556999',borderWidth:1,borderDash:[3,3]},
+          hMid:{type:'line',yMin:medOVX,yMax:medOVX,borderColor:'#47556999',borderWidth:1,borderDash:[3,3]},
+          lblHLV:{type:'label',xValue:75,yValue:medOVX*0.63,content:['HIGH STRIP','LOW VOL','HEDGE NOW'],color:'#22c55ecc',font:{size:7,weight:'bold',family:'IBM Plex Mono'},textAlign:'center'},
+          lblHHV:{type:'label',xValue:75,yValue:medOVX*1.37,content:['HIGH STRIP','HIGH VOL','COLLAR/LAYER'],color:'#f59e0bcc',font:{size:7,family:'IBM Plex Mono'},textAlign:'center'},
+          lblLLV:{type:'label',xValue:25,yValue:medOVX*0.63,content:['LOW STRIP','LOW VOL','WAIT/FLOORS'],color:'#94a3b8cc',font:{size:7,family:'IBM Plex Mono'},textAlign:'center'},
+          lblLHV:{type:'label',xValue:25,yValue:medOVX*1.37,content:['LOW STRIP','HIGH VOL','AVOID FIXED'],color:'#ef4444cc',font:{size:7,family:'IBM Plex Mono'},textAlign:'center'},
+        }}},
       scales:{
-        x:{...bO.scales.x,min:0,max:100,title:{display:true,text:'Strip Percentile Rank',color:TC,font:{size:9}},ticks:{...bO.scales.x.ticks,callback:v=>v+'th'}},
-        y:{...bO.scales.y,title:{display:true,text:'OVX (Impl. Vol)',color:TC,font:{size:9}},ticks:{...bO.scales.y.ticks,callback:v=>v.toFixed(0)}}}}});
+        x:{...bO.scales.x,min:0,max:100,
+          title:{display:true,text:'Strip Percentile (vs OVX-era history)',color:TC,font:{size:9,family:'IBM Plex Mono'}},
+          ticks:{...bO.scales.x.ticks,callback:v=>v+'th',stepSize:10}},
+        y:{...bO.scales.y,
+          title:{display:true,text:'OVX Implied Vol',color:TC,font:{size:9,family:'IBM Plex Mono'}},
+          ticks:{...bO.scales.y.ticks,callback:v=>v.toFixed(0)}}}}}); 
   }
 
   // ── Mean reversion chart — tied to Dist Tenor selector for fwd window ───
