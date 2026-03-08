@@ -701,9 +701,10 @@ function loadCOTFile(inp){
         return -1;
       };
       const mktCol=findCol('market_and_exchange_names','market and exchange names','market_name');
-      const dateCol=findCol('as_of_date_in_form_yyyy-mm-dd','report_date_as_yyyy_mm_dd','as_of_date','report date');
-      const longCol=findCol('prod_merc_positions_long_all','producer long','prod_merc_long');
-      const shortCol=findCol('prod_merc_positions_short_all','producer short','prod_merc_short');
+      // Supports both Disaggregated (prod_merc_*) and Legacy COT (comm_positions_*) formats
+      const dateCol=findCol('report_date_as_mm_dd_yyyy','report_date_as_yyyy_mm_dd','as_of_date_in_form_yyyy-mm-dd','as_of_date','report date');
+      const longCol=findCol('prod_merc_positions_long_all','comm_positions_long_all','producer long','prod_merc_long','comm long');
+      const shortCol=findCol('prod_merc_positions_short_all','comm_positions_short_all','producer short','prod_merc_short','comm short');
       const oiCol=findCol('open_interest_all','open interest','open_interest');
       if(dateCol<0||longCol<0||shortCol<0||oiCol<0)
         throw new Error(`Could not find required columns. Found: ${headers.slice(0,8).join(', ')}`);
