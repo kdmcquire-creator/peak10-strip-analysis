@@ -101,9 +101,13 @@ td.L{text-align:left;color:var(--sub)}
       <span id="supp-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload Aegis C1–C24</span>
     </label>
     <span class="pill" id="supp-pill" style="display:none"></span>
-    <label title="Upload OVX history CSV from cboe.com — enables implied vol signal. Supports both: full history (DATE,OVX) or dashboard export (Date,Open,High,Low,Close)" style="cursor:pointer">
+    <label title="Upload OVX history CSV from cboe.com — enables implied vol signal. Download: cboe.com → Products → OVX → Historical Data → Download CSV" style="cursor:pointer">
       <input type="file" id="ovx-file" accept=".csv" style="display:none" onchange="loadOVXFile(this)"/>
       <span id="ovx-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload OVX CSV</span>
+    </label>
+    <label title="Upload CFTC COT CSV — fallback if live API fails. Download: cftc.gov → Market Reports → Commitments of Traders → Disaggregated → Futures Only → Historical Compressed → select years → Download TFF CSV" style="cursor:pointer">
+      <input type="file" id="cot-file" accept=".csv,.txt" style="display:none" onchange="loadCOTFile(this)"/>
+      <span id="cot-upload-btn" style="font-size:10px;padding:4px 10px;border-radius:5px;font-weight:700;border:1px solid var(--border2);background:var(--bg3);color:var(--sub);cursor:pointer;white-space:nowrap">⬆ Upload COT CSV</span>
     </label>
     <span class="pill pill-loading" id="status-pill">● Loading</span>
   </div>
@@ -454,6 +458,94 @@ async function fetchCOT(){
     badge.textContent='⚠ Unavailable — CORS or network issue';
     badge.style.background='#f59e0b20';badge.style.color='#f59e0b';badge.style.border='1px solid #f59e0b40';
   }
+}
+
+// ── COT CSV Upload fallback ───────────────────────────────────────────────────
+// For when CFTC Socrata API is unreliable. Accepts CFTC Disaggregated
+// Futures-Only CSV (TFF format). User downloads from:
+// cftc.gov → Market Reports → Commitments of Traders → Disaggregated
+// → Futures Only Historical Compressed → annual CSVs
+// Also accepts the "combined years" export from CFTC's website.
+function loadCOTFile(inp){
+  const file=inp.files[0]; if(!file) return;
+  const btn=document.getElementById('cot-upload-btn');
+  const badge=$('cot-badge');
+  btn.textContent='⏳ Parsing…'; btn.style.color='var(--muted)';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const text=e.target.result;
+      const lines=text.split('
+').filter(l=>l.trim());
+      if(lines.length<2) throw new Error('File appears empty');
+      // Parse header row — handle quoted CSV
+      const parseCSVLine=line=>{
+        const out=[]; let cur='',inQ=false;
+        for(let i=0;i<line.length;i++){
+          const ch=line[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){out.push(cur.trim());cur='';}
+          else cur+=ch;
+        }
+        out.push(cur.trim());
+        return out;
+      };
+      const headers=parseCSVLine(lines[0]).map(h=>h.replace(/"/g,'').trim().toLowerCase());
+      // Find column indices — CFTC uses various header name formats
+      const findCol=(...names)=>{
+        for(const n of names){
+          const i=headers.findIndex(h=>h===n.toLowerCase()||h.includes(n.toLowerCase()));
+          if(i>=0) return i;
+        }
+        return -1;
+      };
+      const mktCol=findCol('market_and_exchange_names','market and exchange names','market_name');
+      const dateCol=findCol('as_of_date_in_form_yyyy-mm-dd','report_date_as_yyyy_mm_dd','as_of_date','report date');
+      const longCol=findCol('prod_merc_positions_long_all','producer long','prod_merc_long');
+      const shortCol=findCol('prod_merc_positions_short_all','producer short','prod_merc_short');
+      const oiCol=findCol('open_interest_all','open interest','open_interest');
+      if(dateCol<0||longCol<0||shortCol<0||oiCol<0)
+        throw new Error(`Could not find required columns. Found: ${headers.slice(0,8).join(', ')}`);
+      const WTI_NAMES=['wti-physical - new york mercantile exchange','wti crude','crude oil, light sweet'];
+      const parseNum=v=>typeof v==='number'?v:parseFloat(String(v||'').replace(/,/g,'').replace(/"/g,''))||0;
+      const rows=[];
+      for(let i=1;i<lines.length;i++){
+        const cols=parseCSVLine(lines[i]);
+        if(cols.length<4) continue;
+        // Filter to WTI rows if market column exists, else include all
+        if(mktCol>=0){
+          const mkt=(cols[mktCol]||'').replace(/"/g,'').toLowerCase();
+          if(!WTI_NAMES.some(n=>mkt.includes('wti')||mkt.includes('crude oil, light sweet'))) continue;
+        }
+        const dateStr=(cols[dateCol]||'').replace(/"/g,'').trim().slice(0,10);
+        if(!dateStr||dateStr.length<10) continue;
+        const long=parseNum(cols[longCol]);
+        const short=parseNum(cols[shortCol]);
+        const oi=parseNum(cols[oiCol])||1;
+        if(oi<100) continue; // skip bad rows
+        rows.push({date:dateStr,prodLong:long,prodShort:short,oi,
+          netShortRatio:+((short-long)/oi).toFixed(4)});
+      }
+      if(rows.length<10) throw new Error(`Only ${rows.length} WTI rows found — check file format or market name filter`);
+      // Sort and deduplicate (keep last entry per date if multiple files combined)
+      rows.sort((a,b)=>a.date.localeCompare(b.date));
+      COT_WTI=rows;
+      const latest=COT_WTI[COT_WTI.length-1];
+      const allNSR=COT_WTI.map(d=>d.netShortRatio);
+      const pctRank=Math.round(COT_WTI.filter(d=>d.netShortRatio<latest.netShortRatio).length/COT_WTI.length*100);
+      badge.textContent=`✓ ${COT_WTI.length} wks (CSV) · NSR ${(latest.netShortRatio*100).toFixed(1)}% · ${pctRank}th pct`;
+      badge.style.background='#22c55e20';badge.style.color='#22c55e';badge.style.border='1px solid #22c55e40';
+      btn.textContent=`✓ COT ${COT_WTI.length}wk`;btn.style.color='var(--green)';
+      inp.value='';
+      if(document.getElementById('tab-regime')?.classList.contains('active')) renderRegime();
+    }catch(err){
+      btn.textContent='⚠ Parse error';btn.style.color='var(--red)';
+      badge.textContent='⚠ '+err.message;
+      badge.style.background='#ef444420';badge.style.color='#ef4444';badge.style.border='1px solid #ef444440';
+      console.error('COT CSV parse error:',err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 // Netlify HTTPS origin — direct EIA API calls work without any proxy
@@ -1686,7 +1778,7 @@ function renderRegime(){
     const ctx2=ovxEl.getContext('2d');
     ctx2.clearRect(0,0,ovxEl.width,ovxEl.height);
     ctx2.fillStyle='#64748b';ctx2.font='12px IBM Plex Mono';ctx2.textAlign='center';
-    ctx2.fillText('⬆  Upload OVX CSV (CBOE) to enable this chart',ovxEl.width/2,ovxEl.height/2-10);
+    ctx2.fillText('⬆  Upload OVX CSV to enable  ·  Download: cboe.com → Products → OVX → Historical Data',ovxEl.width/2,ovxEl.height/2-10);
     ctx2.fillStyle='#475569';ctx2.font='10px IBM Plex Mono';
     ctx2.fillText('Download from cboe.com → Indices → OVX → download icon',ovxEl.width/2,ovxEl.height/2+14);
   }
